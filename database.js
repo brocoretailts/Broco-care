@@ -262,23 +262,28 @@ async function syncLocalToTurso() {
 async function exportTursoToLocal() {
   if (!turso || !db) return;
   const tables = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
-  db.exec("BEGIN");
-  for (const t of tables) {
-    db.exec(`DELETE FROM "${t}"`);
-  }
-  for (const table of tables) {
-    const r = await turso.execute({ sql: `SELECT * FROM "${table}"`, args: [] });
-    const rows = rowsToObjects(r.rows, r.columns);
-    if (rows.length === 0) continue;
-    const cols = Object.keys(rows[0]);
-    const ph = cols.map(() => '?').join(',');
-    const qn = cols.map(c => `"${c}"`).join(',');
-    const stmt = db.prepare(`INSERT INTO "${table}" (${qn}) VALUES (${ph})`);
-    for (const row of rows) {
-      stmt.run(cols.map(c => row[c]));
+  try {
+    db.exec("BEGIN");
+    for (const t of tables) {
+      db.exec(`DELETE FROM "${t}"`);
     }
+    for (const table of tables) {
+      const r = await turso.execute({ sql: `SELECT * FROM "${table}"`, args: [] });
+      const rows = rowsToObjects(r.rows, r.columns);
+      if (rows.length === 0) continue;
+      const cols = Object.keys(rows[0]);
+      const ph = cols.map(() => '?').join(',');
+      const qn = cols.map(c => `"${c}"`).join(',');
+      const stmt = db.prepare(`INSERT INTO "${table}" (${qn}) VALUES (${ph})`);
+      for (const row of rows) {
+        stmt.run(cols.map(c => row[c]));
+      }
+    }
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch (e2) { /* ignore */ }
+    throw e;
   }
-  db.exec("COMMIT");
 }
 
 setInterval(cleanupSessions, 3600000);

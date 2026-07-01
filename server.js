@@ -756,7 +756,10 @@ app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', 'attachment; filename="broco-full-backup-' + dateStr + '.zip"');
   var archive = archiver('zip', { zlib: { level: 6 } });
-  archive.on('error', function(err) { throw err; });
+  archive.on('error', function(err) {
+    console.error('Archiver error:', err.message);
+    if (!res.headersSent) res.status(500).send('Backup failed: ' + err.message);
+  });
   archive.pipe(res);
   archive.file(path.join(__dirname, 'database.sqlite'), { name: 'database.sqlite' });
   var uploadsDir = path.join(__dirname, 'public', 'uploads');
