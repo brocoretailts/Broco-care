@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const { run, runWithResults, queryAll } = require('./database');
 
 async function seed() {
-  const users = queryAll("SELECT COUNT(*) as count FROM users");
+  const users = await queryAll("SELECT COUNT(*) as count FROM users");
   if (users[0].count > 0) {
     console.log('Database sudah memiliki data. Lewati seeding.');
     return;
@@ -21,7 +21,7 @@ async function seed() {
   ];
 
   for (const u of userData) {
-    run("INSERT INTO users (username, password, name, role, phone, email) VALUES (?, ?, ?, ?, ?, ?)", u);
+    await run("INSERT INTO users (username, password, name, role, phone, email) VALUES (?, ?, ?, ?, ?, ?)", u);
   }
 
   const productData = [
@@ -36,7 +36,7 @@ async function seed() {
   ];
 
   for (const p of productData) {
-    run("INSERT INTO products (kode_barang, nama_produk, tipe, garansi_bulan) VALUES (?, ?, ?, ?)", p);
+    await run("INSERT INTO products (kode_barang, nama_produk, tipe, garansi_bulan) VALUES (?, ?, ?, ?)", p);
   }
 
   const today = new Date();
@@ -73,7 +73,7 @@ async function seed() {
     var approvedAt = (t.status !== 'waiting') ? nowStr : null;
     var closedAt = (t.status === 'completed' || t.status === 'rejected') ? nowStr : null;
 
-    run(
+    await run(
       "INSERT INTO tickets (ticket_no, created_by, product_id, kode_barang, tanggal_complaint, customer_name, customer_alamat, customer_hp, customer_email, customer_kota, customer_provinsi, tanggal_pembelian, toko, marketplace, keluhan, status, admin_analysis, management_decision, management_comment, approved_by, approved_at, closed_by, closed_at) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'Jawa Barat', ?, 'Toko Elektronik', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         t.no, t.pid, t.kode, now,
@@ -97,7 +97,7 @@ async function seed() {
 
   const ticketsForSchedule = queryAll("SELECT id, ticket_no FROM tickets WHERE status IN ('scheduled','on_progress','completed')");
   for (const tk of ticketsForSchedule) {
-    run(
+    await run(
       "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, created_by) VALUES (?, ?, ?, ?, 1)",
       [tk.id, (tk.id % 3) + 3, now, `${8 + (tk.id % 8)}:00`]
     );
@@ -107,7 +107,7 @@ async function seed() {
   const solusiOptions = ['Servis', 'Ganti Sparepart', 'Ganti Unit'];
   for (const tk of completedTickets) {
     const solusi = solusiOptions[Math.floor(Math.random() * solusiOptions.length)];
-    run(
+    await run(
       "INSERT INTO visit_results (ticket_id, teknisi_id, tanggal, jam, hasil_pemeriksaan, solusi, sparepart, tanggal_selesai) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [tk.id, (tk.id % 3) + 3, now, `${8 + (tk.id % 8)}:00`,
        'Ditemukan kerusakan pada komponen. Dilakukan perbaikan sesuai prosedur.',
@@ -126,12 +126,12 @@ async function seed() {
   ];
 
   for (const n of notifMessages) {
-    run("INSERT INTO notifications (user_id, role, message, link) VALUES (?, ?, ?, ?)", n);
+    await run("INSERT INTO notifications (user_id, role, message, link) VALUES (?, ?, ?, ?)", n);
   }
 
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 1, 'create', 'Ticket dibuat' FROM tickets");
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 2, 'approve', 'Disetujui Management' FROM tickets WHERE status IN ('scheduled','on_progress','completed')");
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 1, 'close', 'Ticket ditutup' FROM tickets WHERE status = 'completed'");
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 1, 'create', 'Ticket dibuat' FROM tickets");
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 2, 'approve', 'Disetujui Management' FROM tickets WHERE status IN ('scheduled','on_progress','completed')");
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) SELECT id, 1, 'close', 'Ticket ditutup' FROM tickets WHERE status = 'completed'");
 
   console.log('Seeding selesai!');
   console.log('');

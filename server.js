@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('express-async-errors');
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
@@ -7,7 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
@@ -78,32 +79,44 @@ function validateCsrf(req, res, next) {
   next();
 }
 
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   res.locals.user = req.session.user || null;
   res.locals.path = req.path;
+  if (req.session.user) {
+    try {
+      res.locals.notifCount = await getNotifCount(req.session.user);
+      res.locals.notifs = await getNotifs(req.session.user);
+    } catch (e) {
+      res.locals.notifCount = 0;
+      res.locals.notifs = [];
+    }
+  } else {
+    res.locals.notifCount = 0;
+    res.locals.notifs = [];
+  }
   next();
 });
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-function getManagementPhones() {
-  const users = queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
+async function getManagementPhones() {
+  const users = await await queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
   return users.map(u => u.phone).filter(Boolean);
 }
 
-function getAdminPhones() {
-  const users = queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
+async function getAdminPhones() {
+  const users = await await queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
   return users.map(u => u.phone).filter(Boolean);
 }
 
-function getAdminIds() {
-  const users = queryAll("SELECT id FROM users WHERE role = 'admin'");
+async function getAdminIds() {
+  const users = await await queryAll("SELECT id FROM users WHERE role = 'admin'");
   return users.map(u => u.id);
 }
 
-function getTeknisiPhone(teknisiId) {
-  const u = queryOne("SELECT phone FROM users WHERE id = ?", [teknisiId]);
+async function getTeknisiPhone(teknisiId) {
+  const u = await await queryOne("SELECT phone FROM users WHERE id = ?", [teknisiId]);
   return u ? u.phone : null;
 }
 
@@ -123,6 +136,7 @@ function getLocalIP() {
 initDB();
 
 async function startup() {
+  await ensureTursoTables();
   await seed();
   wa.init();
   const ip = getLocalIP();
@@ -130,22 +144,23 @@ async function startup() {
   console.log('================================================');
   console.log('  Broco Smart Care - CMS Running!');
   console.log(`  Local   : http://localhost:${PORT}`);
-  console.log(`  Network : http://${ip}:${PORT}`);
+  if (process.env.TURSO_DB_URL) console.log('  Database : Turso (remote)');
+  else console.log(`  Network : http://${ip}:${PORT}`);
   console.log('================================================');
   console.log('');
 }
 startup();
 
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
   if (req.session.user) return res.redirect('/dashboard');
   res.redirect('/login');
 });
 
-app.get('/login', redirectIfAuthenticated, (req, res) => {
+app.get('/login', redirectIfAuthenticated, async (req, res) => {
   res.render('auth/login', { error: null });
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   var ip = req.ip || req.connection.remoteAddress;
   if (loginAttempts[ip] && loginAttempts[ip] >= 10) {
     return res.render('auth/login', { error: 'Terlalu banyak percobaan login. Coba lagi 15 menit.' });
@@ -153,7 +168,7 @@ app.post('/login', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.render('auth/login', { error: 'Username dan password wajib diisi' });
   if (username.length > 50 || password.length > 100) return res.render('auth/login', { error: 'Input tidak valid' });
-  const user = queryOne("SELECT * FROM users WHERE username = ? AND active = 1", [username]);
+  const user = await queryOne("SELECT * FROM users WHERE username = ? AND active = 1", [username]);
   if (!user || !bcrypt.compareSync(password, user.password)) {
     loginAttempts[ip] = (loginAttempts[ip] || 0) + 1;
     return res.render('auth/login', { error: 'Username atau password salah' });
@@ -166,12 +181,12 @@ app.post('/login', (req, res) => {
   res.redirect('/dashboard');
 });
 
-app.get('/logout', (req, res) => {
+app.get('/logout', async (req, res) => {
   req.session.destroy();
   res.redirect('/login');
 });
 
-app.get('/dashboard', isAuthenticated, (req, res) => {
+app.get('/dashboard', isAuthenticated, async (req, res) => {
   const role = req.session.user.role;
   if (role === 'admin') return res.redirect('/admin/dashboard');
   if (role === 'management') return res.redirect('/management/dashboard');
@@ -179,25 +194,26 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
   res.redirect('/login');
 });
 
-function getNotifCount(user) {
+async function getNotifCount(user) {
   if (!user) return 0;
-  return queryOne(
+  const r = await await queryOne(
     "SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
     [user.id, user.role]
-  ).count;
+  );
+  return r ? r.count : 0;
 }
 
-function getNotifs(user) {
+async function getNotifs(user) {
   if (!user) return [];
-  return queryAll(
+  return await await queryAll(
     "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) ORDER BY created_at DESC LIMIT 10",
     [user.id, user.role]
   );
 }
 
-function generateTicketNo() {
+async function generateTicketNo() {
   const year = new Date().getFullYear();
-  const last = queryOne(
+  const last = await await queryOne(
     "SELECT ticket_no FROM tickets WHERE ticket_no LIKE ? ORDER BY id DESC LIMIT 1",
     [`SC-${year}-%`]
   );
@@ -241,30 +257,30 @@ function wrap(fn) {
 
 /* ============= ADMIN ROUTES ============= */
 
-app.get('/admin/dashboard', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
   const today = todayStr();
   const stats = {
-    complaint_hari_ini: queryOne("SELECT COUNT(*) as c FROM tickets WHERE tanggal_complaint = ?", [today]).c,
-    waiting_approval: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
-    waiting_schedule: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'scheduled'").c,
-    on_progress: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'on_progress'").c,
-    completed: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed'").c,
-    rejected: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'rejected'").c,
+    complaint_hari_ini: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE tanggal_complaint = ?", [today]).c,
+    waiting_approval: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
+    waiting_schedule: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'scheduled'").c,
+    on_progress: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'on_progress'").c,
+    completed: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed'").c,
+    rejected: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'rejected'").c,
   };
 
-  const topProducts = queryAll(`
+  const topProducts = await queryAll(`
     SELECT p.nama_produk, COUNT(*) as total
     FROM tickets t JOIN products p ON t.product_id = p.id
     GROUP BY t.product_id ORDER BY total DESC LIMIT 5
   `);
 
-  const avgTime = queryOne(`
+  const avgTime = await queryOne(`
     SELECT AVG(
       julianday(substr(closed_at,1,10)) - julianday(substr(created_at,1,10))
     ) as avg_hari FROM tickets WHERE status = 'completed' AND closed_at IS NOT NULL
   `);
 
-  const overdueTickets = queryAll(`
+  const overdueTickets = await queryAll(`
     SELECT t.id, t.ticket_no, t.customer_name, t.customer_hp, t.keluhan, t.created_at, t.status,
       julianday(datetime('now','localtime')) - julianday(t.created_at) as hari
     FROM tickets t
@@ -276,19 +292,19 @@ app.get('/admin/dashboard', isAuthenticated, isAdmin, (req, res) => {
   res.render('admin/dashboard', {
     stats, topProducts, overdueTickets,
     avgTime: avgTime ? Math.round(avgTime.avg_hari * 10) / 10 : 0,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user),
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user),
     todayStr: today
   });
 });
 
-app.get('/admin/tickets/create', isAuthenticated, isAdmin, (req, res) => {
-  const products = queryAll("SELECT * FROM products ORDER BY nama_produk");
-  const ticketNo = generateTicketNo();
+app.get('/admin/tickets/create', isAuthenticated, isAdmin, async (req, res) => {
+  const products = await queryAll("SELECT * FROM products ORDER BY nama_produk");
+  const ticketNo = await generateTicketNo();
   res.render('admin/ticket-create', {
     products, ticketNo, today: todayStr(),
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
@@ -297,19 +313,19 @@ app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
   { name: 'foto_produk', maxCount: 1 },
   { name: 'video', maxCount: 1 },
   { name: 'foto_kerusakan', maxCount: 1 },
-]), validateCsrf, (req, res) => {
+]), validateCsrf, async (req, res) => {
   const body = req.body;
   const files = req.files || {};
   if (!body.customer_name || !body.keluhan) return res.redirect('/admin/tickets/create?error=required');
 
-  const result = runWithResults(
+  const result = await runWithResults(
     `INSERT INTO tickets (ticket_no, created_by, product_id, kode_barang, tanggal_complaint,
       customer_name, customer_alamat, customer_hp, customer_email, customer_kota, customer_provinsi,
       tanggal_pembelian, toko, marketplace, nomor_invoice, faktur_path, serial_number, keluhan,
       foto_produk_path, video_path, foto_kerusakan_path, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`,
     [
-      body.ticket_no || generateTicketNo(), req.session.user.id,
+      body.ticket_no || await generateTicketNo(), req.session.user.id,
       body.product_id || null, trimStr(body.kode_barang, 50), body.tanggal_complaint || todayStr(),
       trimStr(body.customer_name, 100), trimStr(body.customer_alamat, 200), trimStr(body.customer_hp, 20),
       trimStr(body.customer_email, 100), trimStr(body.customer_kota, 100), trimStr(body.customer_provinsi, 100),
@@ -322,28 +338,28 @@ app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
     ]
   );
 
-  run(
+  await run(
     "INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [result.lastInsertRowid, req.session.user.id, 'create', 'Ticket dibuat']
   );
 
-  run(
+  await run(
     "INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)",
     ['management', `Ticket baru ${body.ticket_no} membutuhkan approval`, '/management/approval']
   );
 
-  wa.sendApprovalNotification(getManagementPhones(), body.ticket_no, body.customer_name);
+  wa.sendApprovalNotification(await getManagementPhones(), body.ticket_no, body.customer_name);
 
   res.redirect('/admin/tickets');
 });
 
-app.get('/admin/products/lookup', isAuthenticated, (req, res) => {
+app.get('/admin/products/lookup', isAuthenticated, async (req, res) => {
   const kode = req.query.kode;
-  const product = queryOne("SELECT * FROM products WHERE kode_barang = ?", [kode]);
+  const product = await queryOne("SELECT * FROM products WHERE kode_barang = ?", [kode]);
   res.json(product || null);
 });
 
-app.get('/admin/tickets', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/tickets', isAuthenticated, isAdmin, async (req, res) => {
   let sql = `SELECT t.*, p.nama_produk, p.tipe FROM tickets t LEFT JOIN products p ON t.product_id = p.id WHERE 1=1`;
   const params = [];
 
@@ -374,19 +390,19 @@ app.get('/admin/tickets', isAuthenticated, isAdmin, (req, res) => {
 
   sql += ' ORDER BY t.id DESC';
 
-  const tickets = queryAll(sql, params);
-  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
+  const tickets = await queryAll(sql, params);
+  const teknisi = await queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
 
   res.render('admin/ticket-list', {
     tickets, teknisi,
     filters: req.query,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.get('/admin/tickets/:id', isAuthenticated, isAdmin, (req, res) => {
-  const ticket = queryOne(`
+app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const ticket = await queryOne(`
     SELECT t.*, p.nama_produk, p.tipe, p.garansi_bulan,
       u1.name as created_by_name, u2.name as approved_by_name, u3.name as closed_by_name
     FROM tickets t
@@ -399,83 +415,83 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, (req, res) => {
 
   if (!ticket) return res.redirect('/admin/tickets');
 
-  const schedule = queryOne("SELECT s.*, u.name as teknisi_name FROM schedules s LEFT JOIN users u ON s.teknisi_id = u.id WHERE s.ticket_id = ?", [req.params.id]);
-  const visit = queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.id]);
-  const logs = queryAll("SELECT l.*, u.name as user_name FROM activity_log l LEFT JOIN users u ON l.user_id = u.id WHERE l.ticket_id = ? ORDER BY l.created_at ASC", [req.params.id]);
-  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
+  const schedule = await queryOne("SELECT s.*, u.name as teknisi_name FROM schedules s LEFT JOIN users u ON s.teknisi_id = u.id WHERE s.ticket_id = ?", [req.params.id]);
+  const visit = await queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.id]);
+  const logs = await queryAll("SELECT l.*, u.name as user_name FROM activity_log l LEFT JOIN users u ON l.user_id = u.id WHERE l.ticket_id = ? ORDER BY l.created_at ASC", [req.params.id]);
+  const teknisi = await queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
 
   res.render('admin/ticket-detail', {
     ticket, schedule, visit, logs, teknisi,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, res) => {
   const analysis = req.body.admin_analysis;
-  run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", [analysis, req.params.id]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
-  run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
-  const ticket = queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
-  if (ticket) wa.sendApprovalNotification(getManagementPhones(), ticket.ticket_no, ticket.customer_name);
+  await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", [analysis, req.params.id]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
+  await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
+  const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+  if (ticket) wa.sendApprovalNotification(await getManagementPhones(), ticket.ticket_no, ticket.customer_name);
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
-app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
   var { teknisi_id, tanggal, jam, notes } = req.body;
   tanggal = toDDMMYYYY(tanggal);
   if (!teknisi_id || !tanggal || !jam) return res.redirect(`/admin/tickets/${req.params.id}?error=required`);
-  const existing = queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  const existing = await queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [req.params.id]);
   if (existing) {
-    run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
+    await run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
       [teknisi_id, tanggal, jam, notes, req.params.id]);
   } else {
-    runWithResults(
+    await runWithResults(
       "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)",
       [req.params.id, teknisi_id, tanggal, jam, notes, req.session.user.id]
     );
   }
-  run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+  await run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'schedule', `Dijadwalkan ke teknisi pada ${tanggal} ${jam}`]);
-  run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+  await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
     [teknisi_id, `Anda mendapat jadwal kunjungan baru`, `/teknisi/visit/${req.params.id}`]);
-  const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
-  if (tick) wa.sendScheduleNotification(getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
+  const tick = await queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+  if (tick) wa.sendScheduleNotification(await getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
-app.post('/admin/tickets/:id/cancel-schedule', isAuthenticated, isAdmin, (req, res) => {
-  const s = queryOne("SELECT teknisi_id FROM schedules WHERE ticket_id = ?", [req.params.id]);
-  run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
-  run("UPDATE tickets SET status = 'waiting', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+app.post('/admin/tickets/:id/cancel-schedule', isAuthenticated, isAdmin, async (req, res) => {
+  const s = await queryOne("SELECT teknisi_id FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  await run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  await run("UPDATE tickets SET status = 'waiting', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'schedule', 'Jadwal dibatalkan']);
   if (s) {
-    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+    await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
       [s.teknisi_id, `Jadwal kunjungan dibatalkan`, `/teknisi/visit/${req.params.id}`]);
-    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
-    if (tick) wa.sendScheduleCancelledNotification(getTeknisiPhone(s.teknisi_id), tick.ticket_no);
+    const tick = await queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+    if (tick) wa.sendScheduleCancelledNotification(await getTeknisiPhone(s.teknisi_id), tick.ticket_no);
   }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
-app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, (req, res) => {
-  run("UPDATE tickets SET status = 'completed', closed_by = ?, closed_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
+app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, async (req, res) => {
+  await run("UPDATE tickets SET status = 'completed', closed_by = ?, closed_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
     [req.session.user.id, req.params.id]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'close', 'Ticket ditutup']);
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
 /* ============= CALENDAR SCHEDULING ============= */
 
-app.get('/admin/calendar', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/calendar', isAuthenticated, isAdmin, async (req, res) => {
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
   const datePattern = `%/${String(month).padStart(2,'0')}/${year}`;
 
-  const schedulingData = queryAll(`
+  const schedulingData = await queryAll(`
     SELECT s.id, s.ticket_id, s.teknisi_id, s.tanggal, s.jam, s.notes,
       t.ticket_no, t.customer_name, t.customer_kota, t.status,
       u.name as teknisi_name, p.nama_produk
@@ -487,7 +503,7 @@ app.get('/admin/calendar', isAuthenticated, isAdmin, (req, res) => {
     ORDER BY s.tanggal, s.jam
   `, [datePattern, `${year}-${String(month).padStart(2,'0')}-%`]);
 
-  const tickets = queryAll(`
+  const tickets = await queryAll(`
     SELECT t.id, t.ticket_no, t.customer_name, t.customer_kota, t.status,
       p.nama_produk, s.id as schedule_id
     FROM tickets t
@@ -497,39 +513,39 @@ app.get('/admin/calendar', isAuthenticated, isAdmin, (req, res) => {
     ORDER BY t.created_at DESC
   `);
 
-  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi' AND active = 1");
+  const teknisi = await queryAll("SELECT id, name FROM users WHERE role = 'teknisi' AND active = 1");
 
   res.render('admin/calendar', {
     schedulingData, year, month, tickets, teknisi,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/admin/calendar/schedule', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/calendar/schedule', isAuthenticated, isAdmin, async (req, res) => {
   try {
     var { ticket_id, teknisi_id, tanggal, jam, notes } = req.body;
     tanggal = toDDMMYYYY(tanggal);
     if (!ticket_id || !teknisi_id || !tanggal || !jam) {
       return res.redirect('/admin/calendar?error=missing_fields');
     }
-    const existing = queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [ticket_id]);
+    const existing = await queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [ticket_id]);
     if (existing) {
-      run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
+      await run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
         [teknisi_id, tanggal, jam, notes, ticket_id]);
     } else {
-      runWithResults(
+      await runWithResults(
         "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)",
         [ticket_id, teknisi_id, tanggal, jam, notes, req.session.user.id]
       );
     }
-    run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ? AND status IN ('waiting','approval')", [ticket_id]);
-    run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    await run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ? AND status IN ('waiting','approval')", [ticket_id]);
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [ticket_id, req.session.user.id, 'schedule', `Dijadwalkan: ${tanggal} ${jam} - ${teknisi_id}`]);
-    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+    await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
       [teknisi_id, `Anda mendapat jadwal kunjungan baru ${tanggal} ${jam}`, `/teknisi/visit/${ticket_id}`]);
-    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [ticket_id]);
-    if (tick) wa.sendScheduleNotification(getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
+    const tick = await queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [ticket_id]);
+    if (tick) wa.sendScheduleNotification(await getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
     res.redirect('/admin/calendar?success=scheduled');
   } catch (e) {
     console.error('Schedule error:', e);
@@ -537,8 +553,8 @@ app.post('/admin/calendar/schedule', isAuthenticated, isAdmin, (req, res) => {
   }
 });
 
-app.get('/admin/calendar/tickets', isAuthenticated, isAdmin, (req, res) => {
-  const tickets = queryAll(`
+app.get('/admin/calendar/tickets', isAuthenticated, isAdmin, async (req, res) => {
+  const tickets = await queryAll(`
     SELECT t.id, t.ticket_no, t.customer_name, t.customer_kota, t.status,
       p.nama_produk, s.id as schedule_id
     FROM tickets t
@@ -550,8 +566,8 @@ app.get('/admin/calendar/tickets', isAuthenticated, isAdmin, (req, res) => {
   res.json(tickets);
 });
 
-app.get('/admin/calendar/events', isAuthenticated, isAdmin, (req, res) => {
-  const events = queryAll(`
+app.get('/admin/calendar/events', isAuthenticated, isAdmin, async (req, res) => {
+  const events = await queryAll(`
     SELECT s.id, s.ticket_id, s.teknisi_id, s.tanggal, s.jam, s.notes,
       t.ticket_no, t.customer_name, t.customer_kota,
       u.name as teknisi_name, p.nama_produk
@@ -564,51 +580,51 @@ app.get('/admin/calendar/events', isAuthenticated, isAdmin, (req, res) => {
   res.json(events);
 });
 
-app.get('/admin/products', isAuthenticated, isAdmin, (req, res) => {
-  const products = queryAll("SELECT * FROM products ORDER BY nama_produk");
+app.get('/admin/products', isAuthenticated, isAdmin, async (req, res) => {
+  const products = await queryAll("SELECT * FROM products ORDER BY nama_produk");
   res.render('admin/products', {
     products,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/admin/products', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/products', isAuthenticated, isAdmin, async (req, res) => {
   const { kode_barang, nama_produk, tipe, garansi_bulan } = req.body;
-  runWithResults(
+  await runWithResults(
     "INSERT INTO products (kode_barang, nama_produk, tipe, garansi_bulan) VALUES (?, ?, ?, ?)",
     [kode_barang, nama_produk, tipe, parseInt(garansi_bulan) || 0]
   );
   res.redirect('/admin/products');
 });
 
-app.post('/admin/products/:id/edit', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/products/:id/edit', isAuthenticated, isAdmin, async (req, res) => {
   const { kode_barang, nama_produk, tipe, garansi_bulan } = req.body;
-  run("UPDATE products SET kode_barang = ?, nama_produk = ?, tipe = ?, garansi_bulan = ? WHERE id = ?",
+  await run("UPDATE products SET kode_barang = ?, nama_produk = ?, tipe = ?, garansi_bulan = ? WHERE id = ?",
     [kode_barang, nama_produk, tipe, parseInt(garansi_bulan) || 0, req.params.id]);
   res.redirect('/admin/products');
 });
 
-app.post('/admin/products/:id/delete', isAuthenticated, isAdmin, (req, res) => {
-  run("DELETE FROM products WHERE id = ?", [req.params.id]);
+app.post('/admin/products/:id/delete', isAuthenticated, isAdmin, async (req, res) => {
+  await run("DELETE FROM products WHERE id = ?", [req.params.id]);
   res.redirect('/admin/products');
 });
 
-app.get('/admin/teknisi', isAuthenticated, isAdmin, (req, res) => {
-  const teknisi = queryAll("SELECT * FROM users WHERE role = 'teknisi' ORDER BY name");
+app.get('/admin/teknisi', isAuthenticated, isAdmin, async (req, res) => {
+  const teknisi = await queryAll("SELECT * FROM users WHERE role = 'teknisi' ORDER BY name");
   res.render('admin/teknisi', {
     teknisi,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/admin/teknisi', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/teknisi', isAuthenticated, isAdmin, async (req, res) => {
   const { name, username, phone } = req.body;
   if (!name || !username) return res.redirect('/admin/teknisi');
   const hash = require('bcryptjs').hashSync('password', 10);
   try {
-    runWithResults(
+    await runWithResults(
       "INSERT INTO users (username, password, name, role, phone) VALUES (?, ?, ?, 'teknisi', ?)",
       [username, hash, name, phone || '']
     );
@@ -618,34 +634,34 @@ app.post('/admin/teknisi', isAuthenticated, isAdmin, (req, res) => {
   res.redirect('/admin/teknisi');
 });
 
-app.post('/admin/teknisi/:id/edit', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/teknisi/:id/edit', isAuthenticated, isAdmin, async (req, res) => {
   const { name, phone, username } = req.body;
-  run("UPDATE users SET name = ?, phone = ?, username = ? WHERE id = ? AND role = 'teknisi'",
+  await run("UPDATE users SET name = ?, phone = ?, username = ? WHERE id = ? AND role = 'teknisi'",
     [name, phone || '', username, req.params.id]);
   if (req.body.password) {
     const hash = require('bcryptjs').hashSync(req.body.password, 10);
-    run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
+    await run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
   }
   res.redirect('/admin/teknisi');
 });
 
-app.post('/admin/teknisi/:id/toggle', isAuthenticated, isAdmin, (req, res) => {
-  const u = queryOne("SELECT active FROM users WHERE id = ? AND role = 'teknisi'", [req.params.id]);
+app.post('/admin/teknisi/:id/toggle', isAuthenticated, isAdmin, async (req, res) => {
+  const u = await queryOne("SELECT active FROM users WHERE id = ? AND role = 'teknisi'", [req.params.id]);
   if (u) {
-    run("UPDATE users SET active = ? WHERE id = ?", [u.active ? 0 : 1, req.params.id]);
+    await run("UPDATE users SET active = ? WHERE id = ?", [u.active ? 0 : 1, req.params.id]);
   }
   res.redirect('/admin/teknisi');
 });
 
-app.get('/admin/whatsapp', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/whatsapp', isAuthenticated, isAdmin, async (req, res) => {
   res.render('admin/whatsapp', {
     waConnected: wa.getStatus().connected,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.get('/admin/settings', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/settings', isAuthenticated, isAdmin, async (req, res) => {
   const dbPath = require('path').join(__dirname, 'database.sqlite');
   const dbSize = fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0;
   const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -655,32 +671,32 @@ app.get('/admin/settings', isAuthenticated, isAdmin, (req, res) => {
         try { return sum + fs.statSync(path.join(uploadsPath, f)).size; } catch(e) { return sum; }
       }, 0)
     : 0;
-  const admins = queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management') ORDER BY role, name");
+  const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management') ORDER BY role, name");
   res.render('admin/settings', {
     dbPath, dbSize, uploadsSize, uploadsDir, admins,
     user: req.session.user,
     query: req.query,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/admin/settings/password', isAuthenticated, (req, res) => {
+app.post('/admin/settings/password', isAuthenticated, async (req, res) => {
   const { current_password, new_password, confirm_password } = req.body;
   if (new_password !== confirm_password) return res.redirect('/admin/settings?error=password_mismatch');
   if (new_password.length < 4) return res.redirect('/admin/settings?error=password_short');
-  const user = queryOne("SELECT password FROM users WHERE id = ?", [req.session.user.id]);
+  const user = await queryOne("SELECT password FROM users WHERE id = ?", [req.session.user.id]);
   if (!user || !bcrypt.compareSync(current_password, user.password)) {
     return res.redirect('/admin/settings?error=wrong_password');
   }
   const hash = bcrypt.hashSync(new_password, 10);
-  run("UPDATE users SET password = ? WHERE id = ?", [hash, req.session.user.id]);
+  await run("UPDATE users SET password = ? WHERE id = ?", [hash, req.session.user.id]);
   res.redirect('/admin/settings?success=password_changed');
 });
 
-app.post('/admin/settings/profile', isAuthenticated, (req, res) => {
+app.post('/admin/settings/profile', isAuthenticated, async (req, res) => {
   const { name, phone, email } = req.body;
-  run("UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?",
+  await run("UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?",
     [name, phone || '', email || '', req.session.user.id]);
   req.session.user.name = name;
   req.session.user.phone = phone || '';
@@ -688,13 +704,13 @@ app.post('/admin/settings/profile', isAuthenticated, (req, res) => {
   res.redirect('/admin/settings?success=profile_updated');
 });
 
-app.post('/admin/settings/user/create', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, res) => {
   const { name, username, password, role, phone, email } = req.body;
   if (!name || !username || !password || !role) return res.redirect('/admin/settings?error=missing_fields');
   if (!['admin','management'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
   try {
     const hash = bcrypt.hashSync(password, 10);
-    runWithResults(
+    await runWithResults(
       "INSERT INTO users (username, password, name, role, phone, email) VALUES (?, ?, ?, ?, ?, ?)",
       [username, hash, name, role, phone || '', email || '']
     );
@@ -704,28 +720,28 @@ app.post('/admin/settings/user/create', isAuthenticated, isAdmin, (req, res) => 
   }
 });
 
-app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, (req, res) => {
+app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) => {
   const { name, phone, email, username } = req.body;
-  run("UPDATE users SET name = ?, phone = ?, email = ?, username = ? WHERE id = ? AND role IN ('admin','management')",
+  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ? WHERE id = ? AND role IN ('admin','management')",
     [name, phone || '', email || '', username, req.params.id]);
   if (req.body.password) {
     const hash = bcrypt.hashSync(req.body.password, 10);
-    run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
+    await run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
   }
   res.redirect('/admin/settings?success=user_updated');
 });
 
-app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
+app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => {
   const dbPath = path.join(__dirname, 'database.sqlite');
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
-  run("PRAGMA wal_checkpoint(TRUNCATE)");
+  checkpoint();
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
 
 var archiver = require('archiver');
-app.get('/admin/backup/download-full', isAuthenticated, isAdmin, function(req, res) {
-  run("PRAGMA wal_checkpoint(TRUNCATE)");
+app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(req, res) {
+  checkpoint();
   var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', 'attachment; filename="broco-full-backup-' + dateStr + '.zip"');
@@ -751,7 +767,7 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
     }
     next();
   });
-}, function(req, res) {
+}, async function(req, res) {
   var uploadedFile = null;
   try {
     if (!req.file) return res.redirect('/admin/settings?error=file_required');
@@ -786,7 +802,7 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
     uploadedFile = null;
     try {
       initDB();
-      queryAll("SELECT COUNT(*) FROM users");
+      await queryAll("SELECT COUNT(*) FROM users");
       try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
       try {
         var tempDir = path.join(__dirname, 'temp');
@@ -870,7 +886,7 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
     uploadedFile = null;
     try {
       initDB();
-      queryAll("SELECT COUNT(*) FROM users");
+      await queryAll("SELECT COUNT(*) FROM users");
       try {
         if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       } catch(e) {}
@@ -891,9 +907,9 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
   }
 });
 
-app.get('/admin/notifications', isAuthenticated, isAdmin, (req, res) => {
-  run("DELETE FROM notifications WHERE created_at < datetime('now','-30 days')");
-  const notifs = queryAll(
+app.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {
+  await run("DELETE FROM notifications WHERE created_at < datetime('now','-30 days')");
+  const notifs = await queryAll(
     "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0 ORDER BY created_at DESC LIMIT 50",
     [req.session.user.id, req.session.user.role]
   );
@@ -905,21 +921,21 @@ app.get('/admin/notifications', isAuthenticated, isAdmin, (req, res) => {
 
 /* ============= MANAGEMENT ROUTES ============= */
 
-app.get('/management/dashboard', isAuthenticated, isManagement, (req, res) => {
+app.get('/management/dashboard', isAuthenticated, isManagement, async (req, res) => {
   try {
     const stats = {
-      waiting: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
-      completed_this_month: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)").c,
-      total: queryOne("SELECT COUNT(*) as c FROM tickets").c,
+      waiting: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
+      completed_this_month: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)").c,
+      total: await queryOne("SELECT COUNT(*) as c FROM tickets").c,
     };
 
-    const pendingApproval = queryAll(`
+    const pendingApproval = await queryAll(`
       SELECT t.id, t.ticket_no, t.customer_name, p.nama_produk, t.keluhan, t.created_at, t.admin_analysis
       FROM tickets t LEFT JOIN products p ON t.product_id = p.id
       WHERE t.status = 'approval' ORDER BY t.created_at DESC LIMIT 5
     `);
 
-    const monthlyStats = queryAll(`
+    const monthlyStats = await queryAll(`
       SELECT substr(created_at,6,2) as bulan, COUNT(*) as total,
         COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as selesai
       FROM tickets WHERE substr(created_at,1,4) = substr(datetime('now','localtime'),1,4)
@@ -933,8 +949,8 @@ app.get('/management/dashboard', isAuthenticated, isManagement, (req, res) => {
     res.render('management/dashboard', {
       stats, pendingApproval, monthlyStats,
       chartLabels, chartTotals, chartCompleted,
-      notifCount: getNotifCount(req.session.user),
-      notifs: getNotifs(req.session.user)
+      notifCount: await getNotifCount(req.session.user),
+      notifs: await getNotifs(req.session.user)
     });
   } catch (e) {
     console.error('Management dashboard error:', e);
@@ -942,50 +958,50 @@ app.get('/management/dashboard', isAuthenticated, isManagement, (req, res) => {
   }
 });
 
-app.get('/management/approval', isAuthenticated, isManagement, (req, res) => {
-  const tickets = queryAll(`
+app.get('/management/approval', isAuthenticated, isManagement, async (req, res) => {
+  const tickets = await queryAll(`
     SELECT t.*, p.nama_produk, p.tipe
     FROM tickets t LEFT JOIN products p ON t.product_id = p.id
     WHERE t.status = 'approval' ORDER BY t.created_at DESC
   `);
-  run("UPDATE notifications SET is_read = 1 WHERE role = 'management' AND is_read = 0");
+  await run("UPDATE notifications SET is_read = 1 WHERE role = 'management' AND is_read = 0");
   res.render('management/approval', {
     tickets,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.post('/management/approval/:id', isAuthenticated, isManagement, (req, res) => {
+app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, res) => {
   try {
     const { decision, comment } = req.body;
     if (decision !== 'Servis' && decision !== 'Ganti Unit' && decision !== 'reject') {
       return res.redirect('/management/approval');
     }
-    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+    const tick = await queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
     const tickNo = tick ? tick.ticket_no : `#${req.params.id}`;
     if (decision === 'reject') {
-      run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'rejected', updated_at = datetime('now','localtime') WHERE id = ?",
+      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'rejected', updated_at = datetime('now','localtime') WHERE id = ?",
         [decision, comment || '', req.params.id]);
-      run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'reject', `Ditolak: ${comment || 'Tidak ada komentar'}`]);
-      var adminIds = getAdminIds();
-      adminIds.forEach(function(uid) {
-        run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+      var adminIds = await getAdminIds();
+      for (const uid of adminIds) {
+        await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket ditolak oleh Management`, `/admin/tickets/${req.params.id}`]);
-      });
-      wa.sendRejectedNotification(getAdminPhones(), tickNo);
+      }
+      wa.sendRejectedNotification(await getAdminPhones(), tickNo);
     } else {
-      run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
+      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
         [decision, comment || '', req.session.user.id, req.params.id]);
-      run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'approve', `Disetujui: ${decision} - ${comment || ''}`]);
-      var adminIds = getAdminIds();
-      adminIds.forEach(function(uid) {
-        run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+      var adminIds = await getAdminIds();
+      for (const uid of adminIds) {
+        await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket disetujui Management, silakan buat jadwal`, `/admin/tickets/${req.params.id}`]);
-      });
-      wa.sendApprovedNotification(getAdminPhones(), tickNo);
+      }
+      wa.sendApprovedNotification(await getAdminPhones(), tickNo);
     }
     res.redirect('/management/approval');
   } catch (e) {
@@ -994,39 +1010,39 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, (req, res) =
   }
 });
 
-app.get('/management/reports', isAuthenticated, isManagement, (req, res) => {
+app.get('/management/reports', isAuthenticated, isManagement, async (req, res) => {
   try {
-    const productComplaints = queryAll(`
+    const productComplaints = await queryAll(`
       SELECT COALESCE(p.nama_produk, 'Unknown') as nama_produk, COALESCE(p.tipe, '') as tipe, COUNT(*) as total
       FROM tickets t LEFT JOIN products p ON t.product_id = p.id
       GROUP BY t.product_id ORDER BY total DESC
     `);
 
-    const marketplaceComplaints = queryAll(`
+    const marketplaceComplaints = await queryAll(`
       SELECT COALESCE(marketplace, 'Unknown') as marketplace, COUNT(*) as total
       FROM tickets GROUP BY marketplace ORDER BY total DESC
     `);
 
-    const topIssues = queryAll(`
+    const topIssues = await queryAll(`
       SELECT keluhan, COUNT(*) as total FROM tickets
       WHERE keluhan IS NOT NULL GROUP BY keluhan ORDER BY total DESC LIMIT 10
     `);
 
-    const avgResolution = queryOne(`
+    const avgResolution = await queryOne(`
       SELECT AVG(
         julianday(substr(COALESCE(closed_at, datetime('now','localtime')),1,10)) -
         julianday(substr(created_at,1,10))
       ) as avg_hari FROM tickets WHERE status = 'completed'
     `);
 
-    const topTeknisi = queryAll(`
+    const topTeknisi = await queryAll(`
       SELECT u.name, COUNT(v.id) as total_visit
       FROM visit_results v
       JOIN users u ON v.teknisi_id = u.id
       GROUP BY v.teknisi_id ORDER BY total_visit DESC
     `);
 
-    const topProblemProducts = queryAll(`
+    const topProblemProducts = await queryAll(`
       SELECT COALESCE(p.nama_produk, 'Unknown') as nama_produk, COALESCE(p.tipe, '') as tipe, COUNT(*) as total
       FROM tickets t LEFT JOIN products p ON t.product_id = p.id
       WHERE t.status IN ('completed','on_progress')
@@ -1043,8 +1059,8 @@ app.get('/management/reports', isAuthenticated, isManagement, (req, res) => {
       avgResolution: avgResolution ? Math.round((avgResolution.avg_hari || 0) * 10) / 10 : 0,
       topTeknisi, topProblemProducts,
       chartProductLabels, chartProductData, chartMarketplaceLabels, chartMarketplaceData,
-      notifCount: getNotifCount(req.session.user),
-      notifs: getNotifs(req.session.user)
+      notifCount: await getNotifCount(req.session.user),
+      notifs: await getNotifs(req.session.user)
     });
   } catch (e) {
     console.error('Reports error:', e);
@@ -1054,9 +1070,9 @@ app.get('/management/reports', isAuthenticated, isManagement, (req, res) => {
 
 /* ============= TEKNISI ROUTES ============= */
 
-app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, (req, res) => {
+app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, async (req, res) => {
   const today = todayStr();
-  const todaySchedule = queryAll(`
+  const todaySchedule = await queryAll(`
     SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, t.customer_alamat,
       t.customer_hp, t.keluhan, t.status,
       p.nama_produk, p.tipe,
@@ -1069,7 +1085,7 @@ app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, (req, res) => {
     ORDER BY s.jam ASC
   `, [req.session.user.id, today]);
 
-  const upcomingSchedule = queryAll(`
+  const upcomingSchedule = await queryAll(`
     SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
     FROM schedules s
     JOIN tickets t ON s.ticket_id = t.id
@@ -1081,19 +1097,19 @@ app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, (req, res) => {
 
   const stats = {
     today: todaySchedule.length,
-    completed: queryOne("SELECT COUNT(*) as c FROM visit_results v JOIN schedules s ON v.ticket_id = s.ticket_id WHERE s.teknisi_id = ?", [req.session.user.id]).c,
-    total: queryOne("SELECT COUNT(*) as c FROM schedules WHERE teknisi_id = ?", [req.session.user.id]).c
+    completed: await queryOne("SELECT COUNT(*) as c FROM visit_results v JOIN schedules s ON v.ticket_id = s.ticket_id WHERE s.teknisi_id = ?", [req.session.user.id]).c,
+    total: await queryOne("SELECT COUNT(*) as c FROM schedules WHERE teknisi_id = ?", [req.session.user.id]).c
   };
 
   res.render('teknisi/dashboard', {
     todaySchedule, upcomingSchedule, stats,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.get('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, (req, res) => {
-  const ticket = queryOne(`
+app.get('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, async (req, res) => {
+  const ticket = await queryOne(`
     SELECT t.*, p.nama_produk, p.tipe
     FROM tickets t LEFT JOIN products p ON t.product_id = p.id
     WHERE t.id = ?
@@ -1101,13 +1117,13 @@ app.get('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, (req, res) => {
 
   if (!ticket) return res.redirect('/teknisi/dashboard');
 
-  const schedule = queryOne("SELECT * FROM schedules WHERE ticket_id = ? AND teknisi_id = ?", [req.params.ticketId, req.session.user.id]);
-  const visit = queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
+  const schedule = await queryOne("SELECT * FROM schedules WHERE ticket_id = ? AND teknisi_id = ?", [req.params.ticketId, req.session.user.id]);
+  const visit = await queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
 
   res.render('teknisi/visit', {
     ticket, schedule, visit,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
@@ -1115,16 +1131,16 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
   { name: 'foto_sebelum', maxCount: 1 },
   { name: 'foto_sesudah', maxCount: 1 },
   { name: 'video', maxCount: 1 },
-]), validateCsrf, (req, res) => {
+]), validateCsrf, async (req, res) => {
   const body = req.body;
   const files = req.files || {};
   const now = todayStr();
   const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   if (!body.hasil_pemeriksaan) return res.redirect(`/teknisi/visit/${req.params.ticketId}?error=pemeriksaan_required`);
 
-  const existing = queryOne("SELECT id FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
+  const existing = await queryOne("SELECT id FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
   if (existing) {
-    run(`UPDATE visit_results SET tanggal=?, jam=?, hasil_pemeriksaan=?, solusi=?, sparepart=?, tanggal_selesai=?,
+    await run(`UPDATE visit_results SET tanggal=?, jam=?, hasil_pemeriksaan=?, solusi=?, sparepart=?, tanggal_selesai=?,
       foto_sebelum_path=COALESCE(?,foto_sebelum_path), foto_sesudah_path=COALESCE(?,foto_sesudah_path),
       video_path=COALESCE(?,video_path) WHERE ticket_id=?`,
       [now, jam, trimStr(body.hasil_pemeriksaan, 2000), trimStr(body.solusi, 1000), trimStr(body.sparepart, 500), body.tanggal_selesai ? toDDMMYYYY(body.tanggal_selesai) : now,
@@ -1133,7 +1149,7 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
        files.video ? files.video[0].filename : null,
        req.params.ticketId]);
   } else {
-    runWithResults(
+    await runWithResults(
       `INSERT INTO visit_results (ticket_id, teknisi_id, tanggal, jam, hasil_pemeriksaan, solusi, sparepart,
         foto_sebelum_path, foto_sesudah_path, video_path, tanggal_selesai)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1145,27 +1161,27 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     );
   }
 
-  run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
-  var adminIds = getAdminIds();
-  adminIds.forEach(function(uid) {
-    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+  var adminIds = await getAdminIds();
+  for (const uid of adminIds) {
+    await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
       [uid, `Teknisi telah mengupload hasil kunjungan untuk ticket`, `/admin/tickets/${req.params.ticketId}`]);
-  });
+  }
 
   res.redirect(`/teknisi/visit/${req.params.ticketId}`);
 });
 
-app.post('/teknisi/visit/:ticketId/start', isAuthenticated, isTeknisi, (req, res) => {
-  run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+app.post('/teknisi/visit/:ticketId/start', isAuthenticated, isTeknisi, async (req, res) => {
+  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.ticketId, req.session.user.id, 'start_visit', 'Kunjungan dimulai']);
   res.redirect(`/teknisi/visit/${req.params.ticketId}`);
 });
 
-app.get('/teknisi/history', isAuthenticated, isTeknisi, (req, res) => {
-  const visits = queryAll(`
+app.get('/teknisi/history', isAuthenticated, isTeknisi, async (req, res) => {
+  const visits = await queryAll(`
     SELECT v.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
     FROM visit_results v
     JOIN tickets t ON v.ticket_id = t.id
@@ -1176,13 +1192,13 @@ app.get('/teknisi/history', isAuthenticated, isTeknisi, (req, res) => {
 
   res.render('teknisi/history', {
     visits,
-    notifCount: getNotifCount(req.session.user),
-    notifs: getNotifs(req.session.user)
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
   });
 });
 
-app.get('/management/notifications', isAuthenticated, isManagement, (req, res) => {
-  const notifs = queryAll("SELECT * FROM notifications WHERE role = 'management' AND is_read = 0 ORDER BY created_at DESC LIMIT 50");
+app.get('/management/notifications', isAuthenticated, isManagement, async (req, res) => {
+  const notifs = await queryAll("SELECT * FROM notifications WHERE role = 'management' AND is_read = 0 ORDER BY created_at DESC LIMIT 50");
   res.render('management/notifications', {
     notifs,
     notifCount: 0
@@ -1191,28 +1207,28 @@ app.get('/management/notifications', isAuthenticated, isManagement, (req, res) =
 
 /* ============= NOTIFICATION API ============= */
 
-app.get('/api/notifications/count', isAuthenticated, (req, res) => {
-  res.json({ count: getNotifCount(req.session.user) });
+app.get('/api/notifications/count', isAuthenticated, async (req, res) => {
+  res.json({ count: await getNotifCount(req.session.user) });
 });
 
-app.post('/api/notifications/read/:id', isAuthenticated, (req, res) => {
-  run("DELETE FROM notifications WHERE id = ?", [req.params.id]);
+app.post('/api/notifications/read/:id', isAuthenticated, async (req, res) => {
+  await run("DELETE FROM notifications WHERE id = ?", [req.params.id]);
   res.json({ ok: true });
 });
 
-app.post('/api/notifications/read-all', isAuthenticated, (req, res) => {
-  run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
+app.post('/api/notifications/read-all', isAuthenticated, async (req, res) => {
+  await run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
     [req.session.user.id, req.session.user.role]);
   res.json({ ok: true });
 });
 
-app.post('/api/notifications/delete-read', isAuthenticated, (req, res) => {
-  run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 1",
+app.post('/api/notifications/delete-read', isAuthenticated, async (req, res) => {
+  await run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 1",
     [req.session.user.id, req.session.user.role]);
   res.json({ ok: true });
 });
 
-app.get('/api/wa/status', isAuthenticated, (req, res) => {
+app.get('/api/wa/status', isAuthenticated, async (req, res) => {
   res.json(wa.getStatus());
 });
 
