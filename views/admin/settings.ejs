@@ -18,6 +18,7 @@
     <% if (query.error === 'invalid_file') { %><div class="alert alert-danger">File harus berekstensi .sqlite!</div><% } %>
     <% if (query.error && query.error.startsWith('invalid_database')) { %><div class="alert alert-danger">File database tidak valid! <%= query.error.replace('invalid_database: ', '') %></div><% } %>
     <% if (query.error === 'restore_failed') { %><div class="alert alert-danger">Gagal merestore database. Coba lagi.</div><% } %>
+    <% if (query.error && query.error.startsWith('upload_error')) { %><div class="alert alert-danger">Gagal upload: <%= query.error.replace('upload_error: ', '') %></div><% } %>
 
     <ul class="nav nav-tabs mb-3" id="settingsTabs">
       <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabProfile">Profil Saya</a></li>

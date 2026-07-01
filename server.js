@@ -723,8 +723,18 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
 
-const restoreUpload = multer({ dest: path.join(__dirname, 'temp'), limits: { fileSize: 100 * 1024 * 1024 } });
-app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.single('database'), (req, res) => {
+var tempDir = path.join(__dirname, 'temp');
+try { if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true }); } catch(e) {}
+const restoreUpload = multer({ dest: tempDir, limits: { fileSize: 100 * 1024 * 1024 } });
+app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res, next) {
+  restoreUpload.single('database')(req, res, function(err) {
+    if (err) {
+      console.error('Multer error:', err.message);
+      return res.redirect('/admin/settings?error=' + encodeURIComponent('upload_error: ' + err.message));
+    }
+    next();
+  });
+}, function(req, res) {
   var uploadedFile = null;
   try {
     if (!req.file) return res.redirect('/admin/settings?error=file_required');
