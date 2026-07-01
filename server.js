@@ -8,7 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
@@ -136,8 +136,12 @@ function getLocalIP() {
 initDB();
 
 async function startup() {
-  await ensureTursoTables();
-  await seed();
+  try {
+    await ensureTursoTables();
+    await seed();
+  } catch (e) {
+    console.error('Startup DB error (non-fatal):', e.message);
+  }
   wa.init();
   const ip = getLocalIP();
   console.log('');
@@ -735,6 +739,9 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => 
   const dbPath = path.join(__dirname, 'database.sqlite');
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
   checkpoint();
+  if (process.env.TURSO_DB_URL) {
+    try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
+  }
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
@@ -742,6 +749,9 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => 
 var archiver = require('archiver');
 app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(req, res) {
   checkpoint();
+  if (process.env.TURSO_DB_URL) {
+    try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
+  }
   var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', 'attachment; filename="broco-full-backup-' + dateStr + '.zip"');
@@ -802,6 +812,7 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
     uploadedFile = null;
     try {
       initDB();
+      if (process.env.TURSO_DB_URL) await syncLocalToTurso();
       await queryAll("SELECT COUNT(*) FROM users");
       try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
       try {
@@ -810,6 +821,7 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
       } catch(e) {}
       res.redirect('/admin/settings?success=restored');
     } catch (e) {
+      console.error('Restore error:', e.message);
       closeDB();
       try { if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath); } catch(e2) {}
       try { if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal'); } catch(e2) {}
@@ -886,12 +898,14 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
     uploadedFile = null;
     try {
       initDB();
+      if (process.env.TURSO_DB_URL) await syncLocalToTurso();
       await queryAll("SELECT COUNT(*) FROM users");
       try {
         if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
       } catch(e) {}
       res.redirect('/admin/settings?success=restored');
     } catch (e) {
+      console.error('Full restore error:', e.message);
       closeDB();
       if (hasDb && fs.existsSync(backupPath)) {
         try { fs.unlinkSync(dbPath); } catch(e2) {}

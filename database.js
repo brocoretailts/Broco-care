@@ -150,28 +150,36 @@ function initDB() {
 }
 
 async function run(sql, params = []) {
-  if (turso) return await turso.execute({ sql, args: params });
+  if (turso) {
+    try { return await turso.execute({ sql, args: params }); } catch (e) { console.error('Turso run error, fallback local:', e.message); }
+  }
   return db.prepare(sql).run(params);
 }
 
 async function runWithResults(sql, params = []) {
-  if (turso) return await turso.execute({ sql, args: params });
+  if (turso) {
+    try { return await turso.execute({ sql, args: params }); } catch (e) { console.error('Turso runWithResults error, fallback local:', e.message); }
+  }
   return db.prepare(sql).run(params);
 }
 
 async function queryAll(sql, params = []) {
   if (turso) {
-    const r = await turso.execute({ sql, args: params });
-    return rowsToObjects(r.rows, r.columns);
+    try {
+      const r = await turso.execute({ sql, args: params });
+      return rowsToObjects(r.rows, r.columns);
+    } catch (e) { console.error('Turso queryAll error, fallback local:', e.message); }
   }
   return db.prepare(sql).all(params);
 }
 
 async function queryOne(sql, params = []) {
   if (turso) {
-    const r = await turso.execute({ sql, args: params });
-    const rows = rowsToObjects(r.rows, r.columns);
-    return rows[0] || null;
+    try {
+      const r = await turso.execute({ sql, args: params });
+      const rows = rowsToObjects(r.rows, r.columns);
+      return rows[0] || null;
+    } catch (e) { console.error('Turso queryOne error, fallback local:', e.message); }
   }
   return db.prepare(sql).get(params) || null;
 }
@@ -227,6 +235,52 @@ class SQLiteSessionStore extends (require('express-session').Store) {
   }
 }
 
+const SYNC_TABLES = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
+
+async function syncLocalToTurso() {
+  if (!turso || !db) return;
+  const rev = [...SYNC_TABLES].reverse();
+  for (const t of rev) {
+    try { await turso.execute({ sql: `DELETE FROM "${t}"`, args: [] }); } catch (e) { /* ignore */ }
+  }
+  for (const table of SYNC_TABLES) {
+    const rows = db.prepare(`SELECT * FROM "${table}"`).all();
+    if (rows.length === 0) continue;
+    const cols = Object.keys(rows[0]);
+    const ph = cols.map(() => '?').join(',');
+    const qn = cols.map(c => `"${c}"`).join(',');
+    for (const row of rows) {
+      try {
+        await turso.execute({ sql: `INSERT INTO "${table}" (${qn}) VALUES (${ph})`, args: cols.map(c => row[c]) });
+      } catch (e) {
+        console.error(`Turso sync error [${table}]:`, e.message);
+      }
+    }
+  }
+}
+
+async function exportTursoToLocal() {
+  if (!turso || !db) return;
+  const tables = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
+  db.exec("BEGIN");
+  for (const t of tables) {
+    db.exec(`DELETE FROM "${t}"`);
+  }
+  for (const table of tables) {
+    const r = await turso.execute({ sql: `SELECT * FROM "${table}"`, args: [] });
+    const rows = rowsToObjects(r.rows, r.columns);
+    if (rows.length === 0) continue;
+    const cols = Object.keys(rows[0]);
+    const ph = cols.map(() => '?').join(',');
+    const qn = cols.map(c => `"${c}"`).join(',');
+    const stmt = db.prepare(`INSERT INTO "${table}" (${qn}) VALUES (${ph})`);
+    for (const row of rows) {
+      stmt.run(cols.map(c => row[c]));
+    }
+  }
+  db.exec("COMMIT");
+}
+
 setInterval(cleanupSessions, 3600000);
 
-module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables };
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, SYNC_TABLES };
