@@ -683,6 +683,8 @@ app.post('/admin/settings/profile', isAuthenticated, (req, res) => {
   run("UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?",
     [name, phone || '', email || '', req.session.user.id]);
   req.session.user.name = name;
+  req.session.user.phone = phone || '';
+  req.session.user.email = email || '';
   res.redirect('/admin/settings?success=profile_updated');
 });
 
