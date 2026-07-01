@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 
-const { initDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
@@ -717,6 +717,43 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
+});
+
+const restoreUpload = multer({ dest: path.join(__dirname, 'temp'), limits: { fileSize: 100 * 1024 * 1024 } });
+app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.single('database'), (req, res) => {
+  try {
+    if (!req.file) return res.redirect('/admin/settings?error=file_required');
+    if (!req.file.originalname.endsWith('.sqlite')) {
+      fs.unlinkSync(req.file.path);
+      return res.redirect('/admin/settings?error=invalid_file');
+    }
+    const dbPath = path.join(__dirname, 'database.sqlite');
+    const backupPath = dbPath + '.backup';
+    if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+    closeDB();
+    if (fs.existsSync(dbPath)) fs.renameSync(dbPath, backupPath);
+    fs.renameSync(req.file.path, dbPath);
+    try {
+      initDB();
+      queryAll("SELECT COUNT(*) FROM users");
+      fs.unlinkSync(backupPath);
+      const tempDir = path.join(__dirname, 'temp');
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      res.redirect('/admin/settings?success=restored');
+    } catch (e) {
+      if (fs.existsSync(backupPath)) {
+        closeDB();
+        fs.unlinkSync(dbPath);
+        fs.renameSync(backupPath, dbPath);
+        initDB();
+      }
+      const tempDir = path.join(__dirname, 'temp');
+      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      res.redirect('/admin/settings?error=invalid_database');
+    }
+  } catch (e) {
+    res.redirect('/admin/settings?error=restore_failed');
+  }
 });
 
 app.get('/admin/notifications', isAuthenticated, isAdmin, (req, res) => {

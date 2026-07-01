@@ -147,6 +147,10 @@ function queryOne(sql, params = []) {
 
 function getDB() { return db; }
 
+function closeDB() {
+  try { if (db) { db.close(); db = null; } } catch (e) { /* ignore */ }
+}
+
 function cleanupSessions() {
   try {
     db.prepare("DELETE FROM sessions WHERE expired_at < ?").run(Math.floor(Date.now() / 1000));
@@ -187,4 +191,4 @@ class SQLiteSessionStore extends (require('express-session').Store) {
 
 setInterval(cleanupSessions, 3600000);
 
-module.exports = { initDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore };
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore };

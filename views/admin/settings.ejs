@@ -8,10 +8,15 @@
     <% if (query.success === 'profile_updated') { %><div class="alert alert-success">Profil berhasil diperbarui!</div><% } %>
     <% if (query.success === 'user_updated') { %><div class="alert alert-success">User berhasil diperbarui!</div><% } %>
     <% if (query.success === 'user_created') { %><div class="alert alert-success">User baru berhasil ditambahkan!</div><% } %>
+    <% if (query.success === 'restored') { %><div class="alert alert-success">Database berhasil direstore!</div><% } %>
     <% if (query.error === 'wrong_password') { %><div class="alert alert-danger">Password saat ini salah!</div><% } %>
     <% if (query.error === 'password_mismatch') { %><div class="alert alert-danger">Password baru tidak cocok!</div><% } %>
     <% if (query.error && query.error.startsWith('Username')) { %><div class="alert alert-danger"><%= query.error %></div><% } %>
     <% if (query.error === 'password_short') { %><div class="alert alert-danger">Password minimal 4 karakter!</div><% } %>
+    <% if (query.error === 'file_required') { %><div class="alert alert-danger">Pilih file database terlebih dahulu!</div><% } %>
+    <% if (query.error === 'invalid_file') { %><div class="alert alert-danger">File harus berekstensi .sqlite!</div><% } %>
+    <% if (query.error === 'invalid_database') { %><div class="alert alert-danger">File database tidak valid! Restore dibatalkan.</div><% } %>
+    <% if (query.error === 'restore_failed') { %><div class="alert alert-danger">Gagal merestore database. Coba lagi.</div><% } %>
 
     <ul class="nav nav-tabs mb-3" id="settingsTabs">
       <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabProfile">Profil Saya</a></li>
@@ -105,6 +110,25 @@
                 <p class="mt-2">Download file database <strong>database.sqlite</strong></p>
                 <p class="small text-secondary">File ini berisi semua data: users, tickets, products, schedules, dan lainnya.</p>
                 <a href="/admin/backup/download" class="btn btn-primary"><i class="bi bi-download"></i> Download Backup</a>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-12 mt-3">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white fw-semibold">Restore Backup</div>
+              <div class="card-body">
+                <p class="small text-secondary">Upload file <strong>.sqlite</strong> backup untuk mengembalikan database. Data saat ini akan diganti.</p>
+                <form method="POST" action="/admin/settings/restore" enctype="multipart/form-data">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                      <input type="file" name="database" class="form-control" accept=".sqlite" required>
+                    </div>
+                    <div class="col-md-4">
+                      <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Yakin ingin restore? Semua data saat ini akan diganti!')"><i class="bi bi-upload"></i> Restore Database</button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
