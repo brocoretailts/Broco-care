@@ -745,8 +745,12 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.sing
     var backupPath = dbPath + '.backup';
     try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
     closeDB();
+    try { if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal'); } catch(e) {}
+    try { if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm'); } catch(e) {}
     var hasDb = fs.existsSync(dbPath);
     if (hasDb) fs.renameSync(dbPath, backupPath);
+    try { if (fs.existsSync(backupPath + '-wal')) fs.unlinkSync(backupPath + '-wal'); } catch(e) {}
+    try { if (fs.existsSync(backupPath + '-shm')) fs.unlinkSync(backupPath + '-shm'); } catch(e) {}
     fs.copyFileSync(uploadedFile, dbPath);
     try { fs.unlinkSync(uploadedFile); } catch(e) {}
     uploadedFile = null;
@@ -761,7 +765,9 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.sing
       res.redirect('/admin/settings?success=restored');
     } catch (e) {
       closeDB();
-      try { fs.unlinkSync(dbPath); } catch(e2) {}
+      try { if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath); } catch(e2) {}
+      try { if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal'); } catch(e2) {}
+      try { if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm'); } catch(e2) {}
       if (hasDb) fs.renameSync(backupPath, dbPath);
       initDB();
       res.redirect('/admin/settings?error=restore_failed');
