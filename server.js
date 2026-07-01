@@ -721,60 +721,23 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
 
 const restoreUpload = multer({ dest: path.join(__dirname, 'temp'), limits: { fileSize: 100 * 1024 * 1024 } });
 app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.single('database'), (req, res) => {
-  var tempFile = null;
   try {
     if (!req.file) return res.redirect('/admin/settings?error=file_required');
-    tempFile = req.file.path;
     if (!req.file.originalname.endsWith('.sqlite')) {
-      try { fs.unlinkSync(tempFile); } catch(e) {}
+      try { fs.unlinkSync(req.file.path); } catch(e) {}
       return res.redirect('/admin/settings?error=invalid_file');
     }
-    const dbPath = path.join(__dirname, 'database.sqlite');
-    const backupPath = dbPath + '.backup';
-    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
-    closeDB();
-    var dbExisted = fs.existsSync(dbPath);
-    if (dbExisted) {
-      try { fs.renameSync(dbPath, backupPath); } catch (e) {
-        initDB();
-        try { fs.unlinkSync(tempFile); } catch(e2) {}
-        return res.redirect('/admin/settings?error=backup_failed');
-      }
-    }
+    var dest = path.join(__dirname, 'database.sqlite.restore');
+    try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch(e) {}
+    fs.copyFileSync(req.file.path, dest);
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    fs.writeFileSync(path.join(__dirname, '.restore_pending'), '1');
     try {
-      fs.copyFileSync(tempFile, dbPath);
-      try { fs.unlinkSync(tempFile); } catch(e) {}
-    } catch (e) {
-      if (dbExisted) {
-        try { fs.renameSync(backupPath, dbPath); } catch(e2) {}
-      }
-      initDB();
-      return res.redirect('/admin/settings?error=upload_failed');
-    }
-    try { initDB(); } catch (e) {
-      if (dbExisted) {
-        try { fs.renameSync(backupPath, dbPath); } catch(e2) {}
-        initDB();
-      }
-      return res.redirect('/admin/settings?error=invalid_database');
-    }
-    try { queryAll("SELECT COUNT(*) FROM users"); } catch (e) {
-      closeDB();
-      if (dbExisted) {
-        try { fs.unlinkSync(dbPath); } catch(e2) {}
-        try { fs.renameSync(backupPath, dbPath); } catch(e2) {}
-      }
-      initDB();
-      return res.redirect('/admin/settings?error=invalid_database');
-    }
-    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
-    try {
-      const tempDir = path.join(__dirname, 'temp');
+      var tempDir = path.join(__dirname, 'temp');
       if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
     } catch(e) {}
-    res.redirect('/admin/settings?success=restored');
+    res.redirect('/admin/settings?success=restore_pending');
   } catch (e) {
-    try { if (tempFile) fs.unlinkSync(tempFile); } catch(e2) {}
     res.redirect('/admin/settings?error=restore_failed');
   }
 });

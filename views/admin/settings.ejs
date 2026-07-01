@@ -9,6 +9,7 @@
     <% if (query.success === 'user_updated') { %><div class="alert alert-success">User berhasil diperbarui!</div><% } %>
     <% if (query.success === 'user_created') { %><div class="alert alert-success">User baru berhasil ditambahkan!</div><% } %>
     <% if (query.success === 'restored') { %><div class="alert alert-success">Database berhasil direstore!</div><% } %>
+    <% if (query.success === 'restore_pending') { %><div class="alert alert-info">File backup diterima. <strong>Redeploy Railway</strong> agar database terganti.</div><% } %>
     <% if (query.error === 'wrong_password') { %><div class="alert alert-danger">Password saat ini salah!</div><% } %>
     <% if (query.error === 'password_mismatch') { %><div class="alert alert-danger">Password baru tidak cocok!</div><% } %>
     <% if (query.error && query.error.startsWith('Username')) { %><div class="alert alert-danger"><%= query.error %></div><% } %>
@@ -117,7 +118,7 @@
             <div class="card border-0 shadow-sm">
               <div class="card-header bg-white fw-semibold">Restore Backup</div>
               <div class="card-body">
-                <p class="small text-secondary">Upload file <strong>.sqlite</strong> backup untuk mengembalikan database. Data saat ini akan diganti.</p>
+                <p class="small text-secondary">Upload file <strong>.sqlite</strong> backup, lalu <strong>Redeploy Railway</strong> agar database terganti.</p>
                 <form method="POST" action="/admin/settings/restore" enctype="multipart/form-data">
                   <input type="hidden" name="_csrf" value="<%= csrf %>">
                   <div class="row g-2 align-items-end">
@@ -125,8 +126,11 @@
                       <input type="file" name="database" class="form-control" accept=".sqlite" required>
                     </div>
                     <div class="col-md-4">
-                      <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Yakin ingin restore? Semua data saat ini akan diganti!')"><i class="bi bi-upload"></i> Restore Database</button>
+                      <button type="submit" class="btn btn-warning w-100"><i class="bi bi-upload"></i> Upload Backup</button>
                     </div>
+                  </div>
+                  <div class="mt-2 small text-secondary">
+                    <i class="bi bi-info-circle"></i> Setelah upload, buka Railway Dashboard → <strong>Deployments</strong> → <strong>Redeploy</strong>. Database akan terganti saat app restart.
                   </div>
                 </form>
               </div>
