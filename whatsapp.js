@@ -109,30 +109,37 @@ async function sendWaMessage(phone, message) {
   }
 }
 
+function appLink(path) {
+  var url = process.env.APP_URL || '';
+  if (!url) return '';
+  url = url.replace(/\/+$/, '');
+  return '\n' + url + (path || '');
+}
+
 async function sendApprovalNotification(managementPhones, ticketNo, customer) {
-  var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda. Segera buka aplikasi Broco CMS.';
+  var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
   for (var i = 0; i < managementPhones.length; i++) {
     await sendWaMessage(managementPhones[i], msg);
   }
 }
 
 async function sendApprovedNotification(adminPhone, ticketNo) {
-  var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.';
+  var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
   await sendWaMessage(adminPhone, msg);
 }
 
 async function sendRejectedNotification(adminPhone, ticketNo) {
-  var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.';
+  var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.' + appLink('/admin/tickets');
   await sendWaMessage(adminPhone, msg);
 }
 
 async function sendScheduleNotification(teknisiPhone, ticketNo, tanggal, jam) {
-  var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.';
+  var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.' + appLink('/teknisi/dashboard');
   await sendWaMessage(teknisiPhone, msg);
 }
 
 async function sendScheduleCancelledNotification(teknisiPhone, ticketNo) {
-  var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.';
+  var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.' + appLink('/teknisi/dashboard');
   await sendWaMessage(teknisiPhone, msg);
 }
 
