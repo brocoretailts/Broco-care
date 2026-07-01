@@ -157,8 +157,8 @@ class SQLiteSessionStore extends (require('express-session').Store) {
   get(sid, cb) {
     try {
       const row = db.prepare("SELECT sess FROM sessions WHERE sid = ? AND expired_at >= ?").get(sid, Math.floor(Date.now() / 1000));
-      cb(null, row ? JSON.parse(row.sess) : null);
-    } catch (e) { cb(e); }
+      if (typeof cb === 'function') cb(null, row ? JSON.parse(row.sess) : null);
+    } catch (e) { if (typeof cb === 'function') cb(e); }
   }
   set(sid, session, cb) {
     try {
@@ -166,22 +166,22 @@ class SQLiteSessionStore extends (require('express-session').Store) {
       const maxAge = session.cookie && session.cookie.maxAge ? session.cookie.maxAge : 86400000;
       const expired_at = Math.floor(Date.now() / 1000) + Math.floor(maxAge / 1000);
       db.prepare("INSERT OR REPLACE INTO sessions (sid, sess, expired_at) VALUES (?, ?, ?)").run(sid, sess, expired_at);
-      cb(null);
-    } catch (e) { cb(e); }
+      if (typeof cb === 'function') cb(null);
+    } catch (e) { if (typeof cb === 'function') cb(e); }
   }
   destroy(sid, cb) {
     try {
       db.prepare("DELETE FROM sessions WHERE sid = ?").run(sid);
-      cb(null);
-    } catch (e) { cb(e); }
+      if (typeof cb === 'function') cb(null);
+    } catch (e) { if (typeof cb === 'function') cb(e); }
   }
   touch(sid, session, cb) {
     try {
       const maxAge = session.cookie && session.cookie.maxAge ? session.cookie.maxAge : 86400000;
       const expired_at = Math.floor(Date.now() / 1000) + Math.floor(maxAge / 1000);
       db.prepare("UPDATE sessions SET expired_at = ? WHERE sid = ?").run(expired_at, sid);
-      cb(null);
-    } catch (e) { cb(e); }
+      if (typeof cb === 'function') cb(null);
+    } catch (e) { if (typeof cb === 'function') cb(e); }
   }
 }
 
