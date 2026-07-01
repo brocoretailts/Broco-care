@@ -718,6 +718,7 @@ app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, (req, res) => {
 app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
   const dbPath = path.join(__dirname, 'database.sqlite');
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
+  run("PRAGMA wal_checkpoint(TRUNCATE)");
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
@@ -734,7 +735,8 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.sing
     }
     var testDb;
     try {
-      testDb = new Database(uploadedFile, { readonly: true });
+      testDb = new Database(uploadedFile);
+      testDb.pragma('wal_checkpoint(TRUNCATE)');
       testDb.prepare("SELECT COUNT(*) FROM users").get();
       testDb.close();
     } catch (e) {
