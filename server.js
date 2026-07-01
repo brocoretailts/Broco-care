@@ -8,7 +8,7 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
@@ -738,20 +738,22 @@ app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) 
 app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => {
   const dbPath = path.join(__dirname, 'database.sqlite');
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
-  checkpoint();
+  prepareBackup();
   if (process.env.TURSO_DB_URL) {
     try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
   }
+  prepareBackup();
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
 
 var archiver = require('archiver');
 app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(req, res) {
-  checkpoint();
+  prepareBackup();
   if (process.env.TURSO_DB_URL) {
     try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
   }
+  prepareBackup();
   var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   var zipPath = path.join(__dirname, 'temp', 'broco-full-backup-' + dateStr + '.zip');
   try {
@@ -806,7 +808,7 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
     try {
       testDb = new Database(uploadedFile);
       testDb.pragma('wal_checkpoint(TRUNCATE)');
-      testDb.prepare("SELECT COUNT(*) FROM users").get();
+      testDb.exec("SELECT 1");
       testDb.close();
     } catch (e) {
       try { fs.unlinkSync(uploadedFile); } catch(e2) {}

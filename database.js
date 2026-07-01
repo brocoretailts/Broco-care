@@ -289,4 +289,10 @@ async function exportTursoToLocal() {
 
 setInterval(cleanupSessions, 3600000);
 
-module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, SYNC_TABLES };
+function prepareBackup() {
+  if (!db) return;
+  createTablesLocal();
+  try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) { /* ignore */ }
+}
+
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, SYNC_TABLES };
