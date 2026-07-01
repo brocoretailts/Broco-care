@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 
+const Database = require('better-sqlite3');
 const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
@@ -721,23 +722,50 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
 
 const restoreUpload = multer({ dest: path.join(__dirname, 'temp'), limits: { fileSize: 100 * 1024 * 1024 } });
 app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.single('database'), (req, res) => {
+  var uploadedFile = null;
   try {
     if (!req.file) return res.redirect('/admin/settings?error=file_required');
+    uploadedFile = req.file.path;
     if (!req.file.originalname.endsWith('.sqlite')) {
-      try { fs.unlinkSync(req.file.path); } catch(e) {}
+      try { fs.unlinkSync(uploadedFile); } catch(e) {}
       return res.redirect('/admin/settings?error=invalid_file');
     }
-    var dest = path.join(__dirname, 'database.sqlite.restore');
-    try { if (fs.existsSync(dest)) fs.unlinkSync(dest); } catch(e) {}
-    fs.copyFileSync(req.file.path, dest);
-    try { fs.unlinkSync(req.file.path); } catch(e) {}
-    fs.writeFileSync(path.join(__dirname, '.restore_pending'), '1');
+    var testDb;
     try {
-      var tempDir = path.join(__dirname, 'temp');
-      if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch(e) {}
-    res.redirect('/admin/settings?success=restore_pending');
+      testDb = new Database(uploadedFile, { readonly: true });
+      testDb.prepare("SELECT COUNT(*) FROM users").get();
+      testDb.close();
+    } catch (e) {
+      try { fs.unlinkSync(uploadedFile); } catch(e2) {}
+      return res.redirect('/admin/settings?error=invalid_database');
+    }
+    var dbPath = path.join(__dirname, 'database.sqlite');
+    var backupPath = dbPath + '.backup';
+    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
+    closeDB();
+    var hasDb = fs.existsSync(dbPath);
+    if (hasDb) fs.renameSync(dbPath, backupPath);
+    fs.copyFileSync(uploadedFile, dbPath);
+    try { fs.unlinkSync(uploadedFile); } catch(e) {}
+    uploadedFile = null;
+    try {
+      initDB();
+      queryAll("SELECT COUNT(*) FROM users");
+      try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
+      try {
+        var tempDir = path.join(__dirname, 'temp');
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch(e) {}
+      res.redirect('/admin/settings?success=restored');
+    } catch (e) {
+      closeDB();
+      try { fs.unlinkSync(dbPath); } catch(e2) {}
+      if (hasDb) fs.renameSync(backupPath, dbPath);
+      initDB();
+      res.redirect('/admin/settings?error=restore_failed');
+    }
   } catch (e) {
+    try { if (uploadedFile) fs.unlinkSync(uploadedFile); } catch(e2) {}
     res.redirect('/admin/settings?error=restore_failed');
   }
 });

@@ -4,21 +4,9 @@ const fs = require('fs');
 const { SessionStore } = require('express-session');
 
 const DB_PATH = path.join(__dirname, 'database.sqlite');
-const RESTORE_MARKER = path.join(__dirname, '.restore_pending');
 let db = null;
 
 function initDB() {
-  var restoreFile = path.join(__dirname, 'database.sqlite.restore');
-  if (fs.existsSync(restoreFile) && fs.existsSync(RESTORE_MARKER)) {
-    try {
-      if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-      fs.renameSync(restoreFile, DB_PATH);
-      console.log('Database restored from pending backup file.');
-    } catch (e) {
-      console.error('Restore failed:', e.message);
-    }
-    try { fs.unlinkSync(RESTORE_MARKER); } catch(e) {}
-  }
   db = new Database(DB_PATH);
   db.pragma('journal_mode=WAL');
   db.pragma('foreign_keys=ON');
