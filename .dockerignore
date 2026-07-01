@@ -1,0 +1,12 @@
+node_modules/
+.git/
+.gitignore
+.wwebjs_auth/
+.wwebjs_cache/
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal
+.env
+reset.bat
+start.bat
+*.md
