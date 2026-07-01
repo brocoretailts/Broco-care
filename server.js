@@ -753,20 +753,33 @@ app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(
     try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
   }
   var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', 'attachment; filename="broco-full-backup-' + dateStr + '.zip"');
-  var archive = archiver('zip', { zlib: { level: 6 } });
-  archive.on('error', function(err) {
-    console.error('Archiver error:', err.message);
-    if (!res.headersSent) res.status(500).send('Backup failed: ' + err.message);
-  });
-  archive.pipe(res);
-  archive.file(path.join(__dirname, 'database.sqlite'), { name: 'database.sqlite' });
-  var uploadsDir = path.join(__dirname, 'public', 'uploads');
-  if (fs.existsSync(uploadsDir)) {
-    archive.directory(uploadsDir, 'uploads');
+  var zipPath = path.join(__dirname, 'temp', 'broco-full-backup-' + dateStr + '.zip');
+  try {
+    if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+      fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
+    }
+    await new Promise(function(resolve, reject) {
+      var output = fs.createWriteStream(zipPath);
+      var archive = archiver('zip', { zlib: { level: 6 } });
+      output.on('close', resolve);
+      archive.on('error', function(err) { reject(err); });
+      archive.pipe(output);
+      archive.file(path.join(__dirname, 'database.sqlite'), { name: 'database.sqlite' });
+      var uploadsDir = path.join(__dirname, 'public', 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        archive.directory(uploadsDir, 'uploads');
+      }
+      archive.finalize();
+    });
+    res.download(zipPath, 'broco-full-backup-' + dateStr + '.zip', function(err) {
+      if (err) console.error('Download error:', err.message);
+      try { fs.unlinkSync(zipPath); } catch(e) {}
+    });
+  } catch (e) {
+    console.error('Backup error:', e.message);
+    try { fs.unlinkSync(zipPath); } catch(e2) {}
+    res.status(500).send('Backup failed: ' + e.message);
   }
-  archive.finalize();
 });
 
 var tempDir = path.join(__dirname, 'temp');

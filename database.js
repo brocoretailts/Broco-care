@@ -262,6 +262,7 @@ async function syncLocalToTurso() {
 async function exportTursoToLocal() {
   if (!turso || !db) return;
   const tables = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
+  try { db.exec("ROLLBACK"); } catch (e) { /* clear hanging tx from prev error */ }
   try {
     db.exec("BEGIN");
     for (const t of tables) {
