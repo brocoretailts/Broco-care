@@ -1,0 +1,95 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>Master Teknisi</h4>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeknisiModal"><i class="bi bi-plus"></i> Tambah Teknisi</button>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Nama</th><th>Username</th><th>No. HP</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% teknisi.forEach(function(t) { %>
+            <tr>
+              <td class="fw-semibold"><%= t.name %></td>
+              <td><%= t.username %></td>
+              <td><%= t.phone || '-' %></td>
+              <td>
+                <% if (t.active) { %><span class="badge bg-success">Aktif</span>
+                <% } else { %><span class="badge bg-secondary">Nonaktif</span><% } %>
+              </td>
+              <td class="text-nowrap">
+                <button class="btn btn-sm btn-outline-primary" onclick="editTeknisi(<%= t.id %>, '<%= t.name.replace(/'/g,"\\'") %>', '<%= t.username %>', '<%= (t.phone||'').replace(/'/g,"\\'") %>')" data-bs-toggle="modal" data-bs-target="#editTeknisiModal"><i class="bi bi-pencil"></i></button>
+                <form method="POST" action="/admin/teknisi/<%= t.id %>/toggle" class="d-inline">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <button class="btn btn-sm btn-outline-<%= t.active ? 'warning' : 'success' %>">
+                    <i class="bi bi-<%= t.active ? 'pause' : 'play' %>"></i>
+                  </button>
+                </form>
+                <form method="POST" action="/admin/teknisi/<%= t.id %>/edit" class="d-inline">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <input type="hidden" name="name" value="<%= t.name %>">
+                  <input type="hidden" name="username" value="<%= t.username %>">
+                  <input type="hidden" name="phone" value="<%= t.phone || '' %>">
+                  <input type="hidden" name="password" value="password">
+                  <button class="btn btn-sm btn-outline-info" title="Reset password ke 'password'"><i class="bi bi-key"></i></button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+            <% if (teknisi.length === 0) { %>
+            <tr><td colspan="5" class="text-center text-secondary py-4">Belum ada teknisi</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal fade" id="addTeknisiModal">
+  <div class="modal-dialog">
+    <form method="POST" action="/admin/teknisi" class="modal-content">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="modal-header"><h5 class="modal-title">Tambah Teknisi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">Nama Lengkap</label><input name="name" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Username</label><input name="username" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">No. HP (untuk WA)</label><input name="phone" class="form-control" placeholder="08123456789"></div>
+        <p class="small text-secondary">Password default: <code>password</code></p>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">Simpan</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="editTeknisiModal">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content" id="editTeknisiForm">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="modal-header"><h5 class="modal-title">Edit Teknisi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">Nama Lengkap</label><input name="name" id="editName" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Username</label><input name="username" id="editUsername" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">No. HP (untuk WA)</label><input name="phone" id="editPhone" class="form-control" placeholder="08123456789"></div>
+        <div class="mb-2"><label class="form-label small">Password Baru (kosongkan jika tidak diubah)</label><input name="password" type="password" class="form-control" placeholder="biarkan kosong"></div>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">Simpan</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+function editTeknisi(id, name, username, phone) {
+  document.getElementById('editTeknisiForm').action = '/admin/teknisi/' + id + '/edit';
+  document.getElementById('editName').value = name;
+  document.getElementById('editUsername').value = username;
+  document.getElementById('editPhone').value = phone;
+}
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,40 @@
+<%- include('../partials/header') %>
+<div class="container-fluid min-vh-100 d-flex align-items-center justify-content-center bg-login">
+  <div class="card login-card" style="max-width: 420px; width: 100%; border-radius: 16px;">
+    <div class="card-body p-4">
+      <div class="text-center mb-4">
+        <div class="mb-3">
+          <img src="/images/logo.png" alt="Broco" style="height:60px;">
+        </div>
+        <h4 class="fw-bold">Broco Smart Care</h4>
+        <p class="text-secondary small">Complaint Management System</p>
+      </div>
+      <% if (error) { %>
+        <div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-triangle me-1"></i><%= error %></div>
+      <% } %>
+      <form method="POST" action="/login">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Username</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            <input type="text" name="username" class="form-control" placeholder="Masukkan username" required autofocus>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label small fw-semibold">Password</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            <input type="password" name="password" class="form-control" placeholder="Masukkan password" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+          <i class="bi bi-box-arrow-in-right me-1"></i> Login
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="text-center py-2 fixed-bottom" style="background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.6);font-size:12px;backdrop-filter:blur(4px);">
+  Created by : Rudi Philipus @ Broco - 2026
+</div>
+<%- include('../partials/footer') %>

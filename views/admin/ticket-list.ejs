@@ -1,0 +1,135 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-ticket me-2"></i>Daftar Ticket</h4>
+      <div class="d-flex gap-2 no-print">
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Cetak PDF</button>
+        <a href="/admin/tickets/create" class="btn btn-primary"><i class="bi bi-plus"></i> Buat Ticket</a>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3 no-print">
+      <div class="card-body">
+        <form method="GET" class="row g-2">
+          <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+              <option value="all">Semua Status</option>
+              <option value="waiting" <%= filters.status === 'waiting' ? 'selected' : '' %>>Waiting</option>
+              <option value="approval" <%= filters.status === 'approval' ? 'selected' : '' %>>Approval</option>
+              <option value="scheduled" <%= filters.status === 'scheduled' ? 'selected' : '' %>>Scheduled</option>
+              <option value="on_progress" <%= filters.status === 'on_progress' ? 'selected' : '' %>>On Progress</option>
+              <option value="completed" <%= filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
+              <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+            </select>
+          </div>
+          <div class="col-md-2"><input type="text" name="produk" class="form-control form-control-sm" placeholder="Produk" value="<%= filters.produk || '' %>"></div>
+          <div class="col-md-2"><input type="text" name="marketplace" class="form-control form-control-sm" placeholder="Toko/Marketplace" value="<%= filters.marketplace || '' %>"></div>
+          <div class="col-md-2"><input type="text" name="customer" class="form-control form-control-sm" placeholder="Customer" value="<%= filters.customer || '' %>"></div>
+          <div class="col-md-2"><input type="text" name="kota" class="form-control form-control-sm" placeholder="Kota" value="<%= filters.kota || '' %>"></div>
+          <div class="col-md-1">
+            <select name="penanganan" class="form-select form-select-sm" onchange="this.form.submit()">
+              <option value="">Semua</option>
+              <option value="sudah" <%= filters.penanganan === 'sudah' ? 'selected' : '' %>>Sudah Ditangani</option>
+              <option value="belum" <%= filters.penanganan === 'belum' ? 'selected' : '' %>>Belum Ditangani</option>
+            </select>
+          </div>
+          <div class="col-md-1"><button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-funnel"></i> Filter</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm no-print">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Ticket</th>
+              <th>Produk</th>
+              <th>Customer</th>
+              <th>Kota</th>
+              <th>Pembelian</th>
+              <th>Status</th>
+              <th>Penanganan</th>
+              <th>Tanggal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% tickets.forEach(function(t) { %>
+            <tr>
+              <td class="fw-semibold small"><%= t.ticket_no %></td>
+              <td><%= t.nama_produk || '-' %></td>
+              <td><%= t.customer_name %></td>
+              <td><%= t.customer_kota %></td>
+              <td><% if (t.marketplace && t.marketplace.trim()) { %><%= t.marketplace %><% if (t.toko && t.toko.trim()) { %><br><small class="text-secondary"><%= t.toko %></small><% } %><% } else { %><%= t.toko || '-' %><% } %></td>
+              <td>
+                <% var statusMap = {waiting:['Waiting','warning'],approval:['Approval','warning text-white'],scheduled:['Scheduled','primary'],on_progress:['On Progress','purple'],completed:['Completed','success'],rejected:['Rejected','danger']} %>
+                <% var s = statusMap[t.status] || ['Unknown','secondary'] %>
+                <span class="badge bg-<%= s[1] %>"><%= s[0] %></span>
+              </td>
+              <td class="small">
+                <% if (t.status === 'completed' || t.status === 'on_progress') { %>
+                  <span class="badge bg-success">Sudah</span>
+                <% } else if (t.status === 'rejected') { %>
+                  <span class="text-secondary">-</span>
+                <% } else { %>
+                  <span class="badge bg-warning text-dark">Belum</span>
+                <% } %>
+              </td>
+              <td class="small"><%= t.created_at %></td>
+              <td><a href="/admin/tickets/<%= t.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
+            </tr>
+            <% }) %>
+            <% if (tickets.length === 0) { %>
+            <tr><td colspan="9" class="text-center text-secondary py-4">Tidak ada ticket</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<%- include('../partials/footer') %>
+
+<div class="print-area">
+  <div class="print-body">
+    <div class="p-header">
+      <div class="p-title">BROCO SMART CARE</div>
+      <div class="p-sub">Laporan Ticket — <%= new Date().toLocaleDateString('id-ID', {year:'numeric',month:'long',day:'numeric'}) %></div>
+    </div>
+
+    <div class="p-table" style="display:table;width:100%;">
+      <div class="p-tr p-th">
+        <div class="p-td" style="width:5%;">No</div>
+        <div class="p-td" style="width:16%;">Ticket</div>
+        <div class="p-td" style="width:16%;">Produk</div>
+        <div class="p-td" style="width:18%;">Customer</div>
+        <div class="p-td" style="width:10%;">Kota</div>
+        <div class="p-td" style="width:12%;">Pembelian</div>
+        <div class="p-td" style="width:11%;">Status</div>
+        <div class="p-td" style="width:12%;">Tanggal</div>
+      </div>
+      <% tickets.forEach(function(t, idx) { %>
+      <div class="p-tr">
+        <div class="p-td"><%= idx+1 %></div>
+        <div class="p-td"><%= t.ticket_no %></div>
+        <div class="p-td"><%= t.nama_produk || '-' %></div>
+        <div class="p-td"><%= t.customer_name %></div>
+        <div class="p-td"><%= t.customer_kota %></div>
+        <div class="p-td"><% if (t.marketplace && t.marketplace.trim()) { %><%= t.marketplace %><% if (t.toko && t.toko.trim()) { %><br><small><%= t.toko %></small><% } %><% } else { %><%= t.toko || '-' %><% } %></div>
+        <div class="p-td"><span class="p-status p-<%= t.status %>"><%= t.status.toUpperCase().replace('_',' ') %></span><br><span class="p-handle <%= (t.status=='completed'||t.status=='on_progress')?'handled':'unhandled' %>"><%= (t.status=='completed'||t.status=='on_progress')?'SUDAH':(t.status=='rejected'?'-':'BELUM') %></span></div>
+        <div class="p-td"><%= t.created_at %></div>
+      </div>
+      <% }) %>
+      <% if (tickets.length === 0) { %>
+      <div class="p-tr"><div class="p-td" colspan="8" style="text-align:center;padding:20px;">Tidak ada data</div></div>
+      <% } %>
+    </div>
+
+    <div class="p-footer">
+      Dicetak: <%= new Date().toLocaleDateString('id-ID', {year:'numeric',month:'long',day:'numeric'}) %> | <%= tickets.length %> tiket
+    </div>
+  </div>
+</div>

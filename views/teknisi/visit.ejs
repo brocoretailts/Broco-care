@@ -1,0 +1,111 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <a href="/teknisi/dashboard" class="btn btn-sm btn-outline-secondary mb-3"><i class="bi bi-arrow-left"></i> Kembali</a>
+
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0"><%= ticket.ticket_no %></h5>
+            <% var statusMap = {waiting:['Waiting','warning'],approval:['Approval','warning text-white'],scheduled:['Scheduled','primary'],on_progress:['On Progress','purple'],completed:['Completed','success'],rejected:['Rejected','danger']} %>
+            <% var s = statusMap[ticket.status] || ['Unknown','secondary'] %>
+            <span class="badge bg-<%= s[1] %>"><%= s[0] %></span>
+          </div>
+          <div class="card-body">
+            <h6 class="fw-semibold"><%= ticket.customer_name %></h6>
+            <p class="mb-1 small"><i class="bi bi-geo-alt"></i> <%= ticket.customer_alamat %>, <%= ticket.customer_kota %>, <%= ticket.customer_provinsi %></p>
+            <p class="mb-1 small"><i class="bi bi-telephone"></i> <%= ticket.customer_hp %></p>
+            <hr>
+            <p class="mb-1"><strong>Produk:</strong> <%= ticket.nama_produk %> <%= ticket.tipe ? '('+ticket.tipe+')' : '' %></p>
+            <p class="mb-1"><strong>SN:</strong> <%= ticket.serial_number || '-' %></p>
+            <p class="mb-0"><strong>Keluhan:</strong> <%= ticket.keluhan %></p>
+            <% if (ticket.admin_analysis) { %>
+            <p class="mb-0 mt-2"><strong>Analisa Admin:</strong> <%= ticket.admin_analysis %></p>
+            <% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <% if (!visit) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body text-center">
+            <form method="POST" action="/teknisi/visit/<%= ticket.id %>/start">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button type="submit" class="btn btn-primary btn-lg w-100">
+                <i class="bi bi-play-circle"></i> Mulai Kunjungan
+              </button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-clipboard-check me-1"></i>Hasil Pemeriksaan</h6></div>
+          <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-2">
+                <label class="form-label small">Hasil Pemeriksaan</label>
+                <textarea name="hasil_pemeriksaan" class="form-control" rows="3" placeholder="Deskripsi hasil pemeriksaan..." required><%= visit ? visit.hasil_pemeriksaan : '' %></textarea>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Solusi</label>
+                <div class="d-flex gap-2 flex-wrap">
+                  <% ['Servis','Ganti Sparepart','Ganti Unit','Tidak Bisa Diperbaiki'].forEach(function(opt) { %>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="solusi" value="<%= opt %>" id="sol_<%= opt.replace(/\s/g,'') %>"
+                      <%= visit && visit.solusi === opt ? 'checked' : '' %> required>
+                    <label class="form-check-label" for="sol_<%= opt.replace(/\s/g,'') %>"><%= opt %></label>
+                  </div>
+                  <% }) %>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Sparepart (jika ada)</label>
+                <input type="text" name="sparepart" class="form-control" placeholder="Nama sparepart" value="<%= visit ? visit.sparepart : '' %>">
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Tanggal Selesai</label>
+                <input type="date" name="tanggal_selesai" class="form-control" value="<%= visit ? visit.tanggal_selesai : '' %>">
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Foto Sebelum</label>
+                <input type="file" name="foto_sebelum" class="form-control form-control-sm" accept="image/*" capture="environment">
+                <% if (visit && visit.foto_sebelum_path) { %>
+                  <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank" class="d-block mt-1">
+                    <img src="/uploads/<%= visit.foto_sebelum_path %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
+                  </a>
+                <% } %>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Foto Sesudah</label>
+                <input type="file" name="foto_sesudah" class="form-control form-control-sm" accept="image/*" capture="environment">
+                <% if (visit && visit.foto_sesudah_path) { %>
+                  <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank" class="d-block mt-1">
+                    <img src="/uploads/<%= visit.foto_sesudah_path %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
+                  </a>
+                <% } %>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Video</label>
+                <input type="file" name="video" class="form-control form-control-sm" accept="video/*" capture="environment">
+                <% if (visit && visit.video_path) { %>
+                  <video controls class="w-100 rounded border mt-1" style="max-height:100px">
+                    <source src="/uploads/<%= visit.video_path %>">
+                  </video>
+                <% } %>
+              </div>
+              <button type="submit" class="btn btn-success w-100">
+                <i class="bi bi-check-lg"></i> Simpan Hasil Kunjungan
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<%- include('../partials/footer') %>

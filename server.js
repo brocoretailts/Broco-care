@@ -1,0 +1,1076 @@
+require('dotenv').config();
+const express = require('express');
+const session = require('express-session');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const fs = require('fs');
+
+const { initDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore } = require('./database');
+const { seed } = require('./seed');
+const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
+const wa = require('./whatsapp');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'public', 'uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`);
+  }
+});
+const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','application/pdf','video/mp4','video/webm','video/quicktime'];
+function fileFilter(req, file, cb) {
+  if (ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
+  cb(null, false);
+}
+const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(session({
+  store: new SQLiteSessionStore(),
+  secret: process.env.SESSION_SECRET || require('crypto').randomBytes(32).toString('hex'),
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true
+  }
+}));
+app.use(express.static(path.join(__dirname, 'public')));
+
+/* ============= RATE LIMIT (login brute-force) ============= */
+var loginAttempts = {};
+setInterval(function() { loginAttempts = {}; }, 15 * 60 * 1000);
+
+/* ============= CSRF protection ============= */
+function csrfToken(req, res, next) {
+  if (req.session.user && !req.session.csrf) {
+    req.session.csrf = require('crypto').randomBytes(24).toString('hex');
+  }
+  res.locals.csrf = req.session.csrf || '';
+  if (req.method === 'POST' && req.session.user && !req.is('multipart/form-data')) {
+    var token = req.body._csrf || req.headers['x-csrf-token'];
+    if (!token || token !== req.session.csrf) {
+      return res.status(403).send('Invalid CSRF token. Silakan refresh halaman.');
+    }
+  }
+  next();
+}
+app.use(csrfToken);
+
+function validateCsrf(req, res, next) {
+  var token = req.body._csrf || req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrf) {
+    return res.status(403).send('Invalid CSRF token. Silakan refresh halaman.');
+  }
+  next();
+}
+
+app.use((req, res, next) => {
+  res.locals.user = req.session.user || null;
+  res.locals.path = req.path;
+  next();
+});
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+function getManagementPhones() {
+  const users = queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
+  return users.map(u => u.phone).filter(Boolean);
+}
+
+function getAdminPhones() {
+  const users = queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
+  return users.map(u => u.phone).filter(Boolean);
+}
+
+function getAdminIds() {
+  const users = queryAll("SELECT id FROM users WHERE role = 'admin'");
+  return users.map(u => u.id);
+}
+
+function getTeknisiPhone(teknisiId) {
+  const u = queryOne("SELECT phone FROM users WHERE id = ?", [teknisiId]);
+  return u ? u.phone : null;
+}
+
+function getLocalIP() {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return 'IP_ANDA';
+}
+
+/* ============= STARTUP ============= */
+
+initDB();
+
+async function startup() {
+  await seed();
+  wa.init();
+  const ip = getLocalIP();
+  console.log('');
+  console.log('================================================');
+  console.log('  Broco Smart Care - CMS Running!');
+  console.log(`  Local   : http://localhost:${PORT}`);
+  console.log(`  Network : http://${ip}:${PORT}`);
+  console.log('================================================');
+  console.log('');
+}
+startup();
+
+app.get('/', (req, res) => {
+  if (req.session.user) return res.redirect('/dashboard');
+  res.redirect('/login');
+});
+
+app.get('/login', redirectIfAuthenticated, (req, res) => {
+  res.render('auth/login', { error: null });
+});
+
+app.post('/login', (req, res) => {
+  var ip = req.ip || req.connection.remoteAddress;
+  if (loginAttempts[ip] && loginAttempts[ip] >= 10) {
+    return res.render('auth/login', { error: 'Terlalu banyak percobaan login. Coba lagi 15 menit.' });
+  }
+  const { username, password } = req.body;
+  if (!username || !password) return res.render('auth/login', { error: 'Username dan password wajib diisi' });
+  if (username.length > 50 || password.length > 100) return res.render('auth/login', { error: 'Input tidak valid' });
+  const user = queryOne("SELECT * FROM users WHERE username = ? AND active = 1", [username]);
+  if (!user || !bcrypt.compareSync(password, user.password)) {
+    loginAttempts[ip] = (loginAttempts[ip] || 0) + 1;
+    return res.render('auth/login', { error: 'Username atau password salah' });
+  }
+  delete loginAttempts[ip];
+  req.session.user = {
+    id: user.id, username: user.username, name: user.name,
+    role: user.role, phone: user.phone, email: user.email
+  };
+  res.redirect('/dashboard');
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy();
+  res.redirect('/login');
+});
+
+app.get('/dashboard', isAuthenticated, (req, res) => {
+  const role = req.session.user.role;
+  if (role === 'admin') return res.redirect('/admin/dashboard');
+  if (role === 'management') return res.redirect('/management/dashboard');
+  if (role === 'teknisi') return res.redirect('/teknisi/dashboard');
+  res.redirect('/login');
+});
+
+function getNotifCount(user) {
+  if (!user) return 0;
+  return queryOne(
+    "SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
+    [user.id, user.role]
+  ).count;
+}
+
+function getNotifs(user) {
+  if (!user) return [];
+  return queryAll(
+    "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) ORDER BY created_at DESC LIMIT 10",
+    [user.id, user.role]
+  );
+}
+
+function generateTicketNo() {
+  const year = new Date().getFullYear();
+  const last = queryOne(
+    "SELECT ticket_no FROM tickets WHERE ticket_no LIKE ? ORDER BY id DESC LIMIT 1",
+    [`SC-${year}-%`]
+  );
+  let num = 1;
+  if (last) {
+    num = parseInt(last.ticket_no.split('-')[2]) + 1;
+  }
+  return `SC-${year}-${String(num).padStart(6, '0')}`;
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function toISODate(ddmmyyyy) {
+  if (!ddmmyyyy) return null;
+  const parts = ddmmyyyy.split('/');
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return ddmmyyyy;
+}
+
+function toDDMMYYYY(iso) {
+  if (!iso) return null;
+  const parts = iso.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return iso;
+}
+
+function trimStr(v, maxLen) {
+  if (typeof v !== 'string') return '';
+  return v.trim().substring(0, maxLen || 500);
+}
+
+function wrap(fn) {
+  return (req, res, next) => {
+    try { return fn(req, res, next); }
+    catch (e) { console.error('Error:', e.message); res.status(500).send('Terjadi error: ' + e.message); }
+  };
+}
+
+/* ============= ADMIN ROUTES ============= */
+
+app.get('/admin/dashboard', isAuthenticated, isAdmin, (req, res) => {
+  const today = todayStr();
+  const stats = {
+    complaint_hari_ini: queryOne("SELECT COUNT(*) as c FROM tickets WHERE tanggal_complaint = ?", [today]).c,
+    waiting_approval: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
+    waiting_schedule: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'scheduled'").c,
+    on_progress: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'on_progress'").c,
+    completed: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed'").c,
+    rejected: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'rejected'").c,
+  };
+
+  const topProducts = queryAll(`
+    SELECT p.nama_produk, COUNT(*) as total
+    FROM tickets t JOIN products p ON t.product_id = p.id
+    GROUP BY t.product_id ORDER BY total DESC LIMIT 5
+  `);
+
+  const avgTime = queryOne(`
+    SELECT AVG(
+      julianday(substr(closed_at,1,10)) - julianday(substr(created_at,1,10))
+    ) as avg_hari FROM tickets WHERE status = 'completed' AND closed_at IS NOT NULL
+  `);
+
+  const overdueTickets = queryAll(`
+    SELECT t.id, t.ticket_no, t.customer_name, t.customer_hp, t.keluhan, t.created_at, t.status,
+      julianday(datetime('now','localtime')) - julianday(t.created_at) as hari
+    FROM tickets t
+    WHERE t.status NOT IN ('completed','rejected')
+    AND julianday(datetime('now','localtime')) - julianday(t.created_at) > 3
+    ORDER BY hari DESC LIMIT 10
+  `);
+
+  res.render('admin/dashboard', {
+    stats, topProducts, overdueTickets,
+    avgTime: avgTime ? Math.round(avgTime.avg_hari * 10) / 10 : 0,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user),
+    todayStr: today
+  });
+});
+
+app.get('/admin/tickets/create', isAuthenticated, isAdmin, (req, res) => {
+  const products = queryAll("SELECT * FROM products ORDER BY nama_produk");
+  const ticketNo = generateTicketNo();
+  res.render('admin/ticket-create', {
+    products, ticketNo, today: todayStr(),
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
+  { name: 'faktur', maxCount: 1 },
+  { name: 'foto_produk', maxCount: 1 },
+  { name: 'video', maxCount: 1 },
+  { name: 'foto_kerusakan', maxCount: 1 },
+]), validateCsrf, (req, res) => {
+  const body = req.body;
+  const files = req.files || {};
+  if (!body.customer_name || !body.keluhan) return res.redirect('/admin/tickets/create?error=required');
+
+  const result = runWithResults(
+    `INSERT INTO tickets (ticket_no, created_by, product_id, kode_barang, tanggal_complaint,
+      customer_name, customer_alamat, customer_hp, customer_email, customer_kota, customer_provinsi,
+      tanggal_pembelian, toko, marketplace, nomor_invoice, faktur_path, serial_number, keluhan,
+      foto_produk_path, video_path, foto_kerusakan_path, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'waiting')`,
+    [
+      body.ticket_no || generateTicketNo(), req.session.user.id,
+      body.product_id || null, trimStr(body.kode_barang, 50), body.tanggal_complaint || todayStr(),
+      trimStr(body.customer_name, 100), trimStr(body.customer_alamat, 200), trimStr(body.customer_hp, 20),
+      trimStr(body.customer_email, 100), trimStr(body.customer_kota, 100), trimStr(body.customer_provinsi, 100),
+      body.tanggal_pembelian ? toDDMMYYYY(body.tanggal_pembelian) : null, trimStr(body.toko, 100), trimStr(body.marketplace, 100),
+      trimStr(body.nomor_invoice, 50), files.faktur ? files.faktur[0].filename : null,
+      trimStr(body.serial_number, 100), trimStr(body.keluhan, 1000),
+      files.foto_produk ? files.foto_produk[0].filename : null,
+      files.video ? files.video[0].filename : null,
+      files.foto_kerusakan ? files.foto_kerusakan[0].filename : null
+    ]
+  );
+
+  run(
+    "INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [result.lastInsertRowid, req.session.user.id, 'create', 'Ticket dibuat']
+  );
+
+  run(
+    "INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)",
+    ['management', `Ticket baru ${body.ticket_no} membutuhkan approval`, '/management/approval']
+  );
+
+  wa.sendApprovalNotification(getManagementPhones(), body.ticket_no, body.customer_name);
+
+  res.redirect('/admin/tickets');
+});
+
+app.get('/admin/products/lookup', isAuthenticated, (req, res) => {
+  const kode = req.query.kode;
+  const product = queryOne("SELECT * FROM products WHERE kode_barang = ?", [kode]);
+  res.json(product || null);
+});
+
+app.get('/admin/tickets', isAuthenticated, isAdmin, (req, res) => {
+  let sql = `SELECT t.*, p.nama_produk, p.tipe FROM tickets t LEFT JOIN products p ON t.product_id = p.id WHERE 1=1`;
+  const params = [];
+
+  if (req.query.status && req.query.status !== 'all') {
+    sql += ' AND t.status = ?'; params.push(req.query.status);
+  }
+  if (req.query.produk) {
+    sql += ' AND p.nama_produk LIKE ?'; params.push(`%${req.query.produk}%`);
+  }
+  if (req.query.marketplace) {
+    sql += ' AND t.marketplace LIKE ?'; params.push(`%${req.query.marketplace}%`);
+  }
+  if (req.query.customer) {
+    sql += ' AND t.customer_name LIKE ?'; params.push(`%${req.query.customer}%`);
+  }
+  if (req.query.kota) {
+    sql += ' AND t.customer_kota LIKE ?'; params.push(`%${req.query.kota}%`);
+  }
+  if (req.query.teknisi) {
+    sql += ' AND t.id IN (SELECT ticket_id FROM schedules WHERE teknisi_id = ?)'; params.push(req.query.teknisi);
+  }
+  if (req.query.penanganan === 'sudah') {
+    sql += " AND t.id IN (SELECT ticket_id FROM visit_results)";
+  }
+  if (req.query.penanganan === 'belum') {
+    sql += " AND t.id NOT IN (SELECT ticket_id FROM visit_results WHERE ticket_id IS NOT NULL) AND t.status NOT IN ('rejected')";
+  }
+
+  sql += ' ORDER BY t.id DESC';
+
+  const tickets = queryAll(sql, params);
+  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
+
+  res.render('admin/ticket-list', {
+    tickets, teknisi,
+    filters: req.query,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.get('/admin/tickets/:id', isAuthenticated, isAdmin, (req, res) => {
+  const ticket = queryOne(`
+    SELECT t.*, p.nama_produk, p.tipe, p.garansi_bulan,
+      u1.name as created_by_name, u2.name as approved_by_name, u3.name as closed_by_name
+    FROM tickets t
+    LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN users u1 ON t.created_by = u1.id
+    LEFT JOIN users u2 ON t.approved_by = u2.id
+    LEFT JOIN users u3 ON t.closed_by = u3.id
+    WHERE t.id = ?
+  `, [req.params.id]);
+
+  if (!ticket) return res.redirect('/admin/tickets');
+
+  const schedule = queryOne("SELECT s.*, u.name as teknisi_name FROM schedules s LEFT JOIN users u ON s.teknisi_id = u.id WHERE s.ticket_id = ?", [req.params.id]);
+  const visit = queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.id]);
+  const logs = queryAll("SELECT l.*, u.name as user_name FROM activity_log l LEFT JOIN users u ON l.user_id = u.id WHERE l.ticket_id = ? ORDER BY l.created_at ASC", [req.params.id]);
+  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
+
+  res.render('admin/ticket-detail', {
+    ticket, schedule, visit, logs, teknisi,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, (req, res) => {
+  const analysis = req.body.admin_analysis;
+  run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", [analysis, req.params.id]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
+  run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
+  const ticket = queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+  if (ticket) wa.sendApprovalNotification(getManagementPhones(), ticket.ticket_no, ticket.customer_name);
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
+
+app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, (req, res) => {
+  var { teknisi_id, tanggal, jam, notes } = req.body;
+  tanggal = toDDMMYYYY(tanggal);
+  if (!teknisi_id || !tanggal || !jam) return res.redirect(`/admin/tickets/${req.params.id}?error=required`);
+  const existing = queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  if (existing) {
+    run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
+      [teknisi_id, tanggal, jam, notes, req.params.id]);
+  } else {
+    runWithResults(
+      "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+      [req.params.id, teknisi_id, tanggal, jam, notes, req.session.user.id]
+    );
+  }
+  run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.id, req.session.user.id, 'schedule', `Dijadwalkan ke teknisi pada ${tanggal} ${jam}`]);
+  run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+    [teknisi_id, `Anda mendapat jadwal kunjungan baru`, `/teknisi/visit/${req.params.id}`]);
+  const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+  if (tick) wa.sendScheduleNotification(getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
+
+app.post('/admin/tickets/:id/cancel-schedule', isAuthenticated, isAdmin, (req, res) => {
+  const s = queryOne("SELECT teknisi_id FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  run("UPDATE tickets SET status = 'waiting', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.id, req.session.user.id, 'schedule', 'Jadwal dibatalkan']);
+  if (s) {
+    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+      [s.teknisi_id, `Jadwal kunjungan dibatalkan`, `/teknisi/visit/${req.params.id}`]);
+    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+    if (tick) wa.sendScheduleCancelledNotification(getTeknisiPhone(s.teknisi_id), tick.ticket_no);
+  }
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
+
+app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, (req, res) => {
+  run("UPDATE tickets SET status = 'completed', closed_by = ?, closed_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
+    [req.session.user.id, req.params.id]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.id, req.session.user.id, 'close', 'Ticket ditutup']);
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
+
+/* ============= CALENDAR SCHEDULING ============= */
+
+app.get('/admin/calendar', isAuthenticated, isAdmin, (req, res) => {
+  const year = parseInt(req.query.year) || new Date().getFullYear();
+  const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+  const datePattern = `%/${String(month).padStart(2,'0')}/${year}`;
+
+  const schedulingData = queryAll(`
+    SELECT s.id, s.ticket_id, s.teknisi_id, s.tanggal, s.jam, s.notes,
+      t.ticket_no, t.customer_name, t.customer_kota, t.status,
+      u.name as teknisi_name, p.nama_produk
+    FROM schedules s
+    JOIN tickets t ON s.ticket_id = t.id
+    LEFT JOIN users u ON s.teknisi_id = u.id
+    LEFT JOIN products p ON t.product_id = p.id
+    WHERE s.tanggal LIKE ? OR s.tanggal LIKE ?
+    ORDER BY s.tanggal, s.jam
+  `, [datePattern, `${year}-${String(month).padStart(2,'0')}-%`]);
+
+  const tickets = queryAll(`
+    SELECT t.id, t.ticket_no, t.customer_name, t.customer_kota, t.status,
+      p.nama_produk, s.id as schedule_id
+    FROM tickets t
+    LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN schedules s ON s.ticket_id = t.id
+    WHERE t.status IN ('waiting','approval','scheduled','on_progress')
+    ORDER BY t.created_at DESC
+  `);
+
+  const teknisi = queryAll("SELECT id, name FROM users WHERE role = 'teknisi' AND active = 1");
+
+  res.render('admin/calendar', {
+    schedulingData, year, month, tickets, teknisi,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/calendar/schedule', isAuthenticated, isAdmin, (req, res) => {
+  try {
+    var { ticket_id, teknisi_id, tanggal, jam, notes } = req.body;
+    tanggal = toDDMMYYYY(tanggal);
+    if (!ticket_id || !teknisi_id || !tanggal || !jam) {
+      return res.redirect('/admin/calendar?error=missing_fields');
+    }
+    const existing = queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [ticket_id]);
+    if (existing) {
+      run("UPDATE schedules SET teknisi_id = ?, tanggal = ?, jam = ?, notes = ? WHERE ticket_id = ?",
+        [teknisi_id, tanggal, jam, notes, ticket_id]);
+    } else {
+      runWithResults(
+        "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+        [ticket_id, teknisi_id, tanggal, jam, notes, req.session.user.id]
+      );
+    }
+    run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ? AND status IN ('waiting','approval')", [ticket_id]);
+    run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [ticket_id, req.session.user.id, 'schedule', `Dijadwalkan: ${tanggal} ${jam} - ${teknisi_id}`]);
+    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+      [teknisi_id, `Anda mendapat jadwal kunjungan baru ${tanggal} ${jam}`, `/teknisi/visit/${ticket_id}`]);
+    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [ticket_id]);
+    if (tick) wa.sendScheduleNotification(getTeknisiPhone(teknisi_id), tick.ticket_no, tanggal, jam);
+    res.redirect('/admin/calendar?success=scheduled');
+  } catch (e) {
+    console.error('Schedule error:', e);
+    res.redirect('/admin/calendar?error=' + encodeURIComponent(e.message));
+  }
+});
+
+app.get('/admin/calendar/tickets', isAuthenticated, isAdmin, (req, res) => {
+  const tickets = queryAll(`
+    SELECT t.id, t.ticket_no, t.customer_name, t.customer_kota, t.status,
+      p.nama_produk, s.id as schedule_id
+    FROM tickets t
+    LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN schedules s ON s.ticket_id = t.id
+    WHERE t.status IN ('waiting','approval')
+    ORDER BY t.created_at DESC
+  `);
+  res.json(tickets);
+});
+
+app.get('/admin/calendar/events', isAuthenticated, isAdmin, (req, res) => {
+  const events = queryAll(`
+    SELECT s.id, s.ticket_id, s.teknisi_id, s.tanggal, s.jam, s.notes,
+      t.ticket_no, t.customer_name, t.customer_kota,
+      u.name as teknisi_name, p.nama_produk
+    FROM schedules s
+    JOIN tickets t ON s.ticket_id = t.id
+    LEFT JOIN users u ON s.teknisi_id = u.id
+    LEFT JOIN products p ON t.product_id = p.id
+    ORDER BY s.tanggal, s.jam
+  `);
+  res.json(events);
+});
+
+app.get('/admin/products', isAuthenticated, isAdmin, (req, res) => {
+  const products = queryAll("SELECT * FROM products ORDER BY nama_produk");
+  res.render('admin/products', {
+    products,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/products', isAuthenticated, isAdmin, (req, res) => {
+  const { kode_barang, nama_produk, tipe, garansi_bulan } = req.body;
+  runWithResults(
+    "INSERT INTO products (kode_barang, nama_produk, tipe, garansi_bulan) VALUES (?, ?, ?, ?)",
+    [kode_barang, nama_produk, tipe, parseInt(garansi_bulan) || 0]
+  );
+  res.redirect('/admin/products');
+});
+
+app.post('/admin/products/:id/edit', isAuthenticated, isAdmin, (req, res) => {
+  const { kode_barang, nama_produk, tipe, garansi_bulan } = req.body;
+  run("UPDATE products SET kode_barang = ?, nama_produk = ?, tipe = ?, garansi_bulan = ? WHERE id = ?",
+    [kode_barang, nama_produk, tipe, parseInt(garansi_bulan) || 0, req.params.id]);
+  res.redirect('/admin/products');
+});
+
+app.post('/admin/products/:id/delete', isAuthenticated, isAdmin, (req, res) => {
+  run("DELETE FROM products WHERE id = ?", [req.params.id]);
+  res.redirect('/admin/products');
+});
+
+app.get('/admin/teknisi', isAuthenticated, isAdmin, (req, res) => {
+  const teknisi = queryAll("SELECT * FROM users WHERE role = 'teknisi' ORDER BY name");
+  res.render('admin/teknisi', {
+    teknisi,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/teknisi', isAuthenticated, isAdmin, (req, res) => {
+  const { name, username, phone } = req.body;
+  if (!name || !username) return res.redirect('/admin/teknisi');
+  const hash = require('bcryptjs').hashSync('password', 10);
+  try {
+    runWithResults(
+      "INSERT INTO users (username, password, name, role, phone) VALUES (?, ?, ?, 'teknisi', ?)",
+      [username, hash, name, phone || '']
+    );
+  } catch (e) {
+    console.error('Create teknisi error:', e.message);
+  }
+  res.redirect('/admin/teknisi');
+});
+
+app.post('/admin/teknisi/:id/edit', isAuthenticated, isAdmin, (req, res) => {
+  const { name, phone, username } = req.body;
+  run("UPDATE users SET name = ?, phone = ?, username = ? WHERE id = ? AND role = 'teknisi'",
+    [name, phone || '', username, req.params.id]);
+  if (req.body.password) {
+    const hash = require('bcryptjs').hashSync(req.body.password, 10);
+    run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
+  }
+  res.redirect('/admin/teknisi');
+});
+
+app.post('/admin/teknisi/:id/toggle', isAuthenticated, isAdmin, (req, res) => {
+  const u = queryOne("SELECT active FROM users WHERE id = ? AND role = 'teknisi'", [req.params.id]);
+  if (u) {
+    run("UPDATE users SET active = ? WHERE id = ?", [u.active ? 0 : 1, req.params.id]);
+  }
+  res.redirect('/admin/teknisi');
+});
+
+app.get('/admin/whatsapp', isAuthenticated, isAdmin, (req, res) => {
+  res.render('admin/whatsapp', {
+    waConnected: wa.getStatus().connected,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.get('/admin/settings', isAuthenticated, isAdmin, (req, res) => {
+  const dbPath = require('path').join(__dirname, 'database.sqlite');
+  const dbSize = fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0;
+  const uploadsDir = path.join(__dirname, 'public', 'uploads');
+  const uploadsPath = uploadsDir;
+  const uploadsSize = fs.existsSync(uploadsPath)
+    ? fs.readdirSync(uploadsPath).reduce(function(sum, f) {
+        try { return sum + fs.statSync(path.join(uploadsPath, f)).size; } catch(e) { return sum; }
+      }, 0)
+    : 0;
+  const admins = queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management') ORDER BY role, name");
+  res.render('admin/settings', {
+    dbPath, dbSize, uploadsSize, uploadsDir, admins,
+    user: req.session.user,
+    query: req.query,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/admin/settings/password', isAuthenticated, (req, res) => {
+  const { current_password, new_password, confirm_password } = req.body;
+  if (new_password !== confirm_password) return res.redirect('/admin/settings?error=password_mismatch');
+  if (new_password.length < 4) return res.redirect('/admin/settings?error=password_short');
+  const user = queryOne("SELECT password FROM users WHERE id = ?", [req.session.user.id]);
+  if (!user || !bcrypt.compareSync(current_password, user.password)) {
+    return res.redirect('/admin/settings?error=wrong_password');
+  }
+  const hash = bcrypt.hashSync(new_password, 10);
+  run("UPDATE users SET password = ? WHERE id = ?", [hash, req.session.user.id]);
+  res.redirect('/admin/settings?success=password_changed');
+});
+
+app.post('/admin/settings/profile', isAuthenticated, (req, res) => {
+  const { name, phone, email } = req.body;
+  run("UPDATE users SET name = ?, phone = ?, email = ? WHERE id = ?",
+    [name, phone || '', email || '', req.session.user.id]);
+  req.session.user.name = name;
+  res.redirect('/admin/settings?success=profile_updated');
+});
+
+app.post('/admin/settings/user/create', isAuthenticated, isAdmin, (req, res) => {
+  const { name, username, password, role, phone, email } = req.body;
+  if (!name || !username || !password || !role) return res.redirect('/admin/settings?error=missing_fields');
+  if (!['admin','management'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
+  try {
+    const hash = bcrypt.hashSync(password, 10);
+    runWithResults(
+      "INSERT INTO users (username, password, name, role, phone, email) VALUES (?, ?, ?, ?, ?, ?)",
+      [username, hash, name, role, phone || '', email || '']
+    );
+    res.redirect('/admin/settings?success=user_created');
+  } catch (e) {
+    res.redirect('/admin/settings?error=' + encodeURIComponent('Username sudah ada'));
+  }
+});
+
+app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, (req, res) => {
+  const { name, phone, email, username } = req.body;
+  run("UPDATE users SET name = ?, phone = ?, email = ?, username = ? WHERE id = ? AND role IN ('admin','management')",
+    [name, phone || '', email || '', username, req.params.id]);
+  if (req.body.password) {
+    const hash = bcrypt.hashSync(req.body.password, 10);
+    run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
+  }
+  res.redirect('/admin/settings?success=user_updated');
+});
+
+app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
+  const dbPath = path.join(__dirname, 'database.sqlite');
+  if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
+  const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
+});
+
+app.get('/admin/notifications', isAuthenticated, isAdmin, (req, res) => {
+  run("DELETE FROM notifications WHERE created_at < datetime('now','-30 days')");
+  const notifs = queryAll(
+    "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0 ORDER BY created_at DESC LIMIT 50",
+    [req.session.user.id, req.session.user.role]
+  );
+  res.render('admin/notifications', {
+    notifs,
+    notifCount: 0
+  });
+});
+
+/* ============= MANAGEMENT ROUTES ============= */
+
+app.get('/management/dashboard', isAuthenticated, isManagement, (req, res) => {
+  try {
+    const stats = {
+      waiting: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
+      completed_this_month: queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)").c,
+      total: queryOne("SELECT COUNT(*) as c FROM tickets").c,
+    };
+
+    const pendingApproval = queryAll(`
+      SELECT t.id, t.ticket_no, t.customer_name, p.nama_produk, t.keluhan, t.created_at, t.admin_analysis
+      FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+      WHERE t.status = 'approval' ORDER BY t.created_at DESC LIMIT 5
+    `);
+
+    const monthlyStats = queryAll(`
+      SELECT substr(created_at,6,2) as bulan, COUNT(*) as total,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as selesai
+      FROM tickets WHERE substr(created_at,1,4) = substr(datetime('now','localtime'),1,4)
+      GROUP BY bulan ORDER BY bulan
+    `);
+
+    const chartLabels = JSON.stringify(monthlyStats.map(function(m) { return 'Bulan '+m.bulan }));
+    const chartTotals = JSON.stringify(monthlyStats.map(function(m) { return m.total }));
+    const chartCompleted = JSON.stringify(monthlyStats.map(function(m) { return m.selesai }));
+
+    res.render('management/dashboard', {
+      stats, pendingApproval, monthlyStats,
+      chartLabels, chartTotals, chartCompleted,
+      notifCount: getNotifCount(req.session.user),
+      notifs: getNotifs(req.session.user)
+    });
+  } catch (e) {
+    console.error('Management dashboard error:', e);
+    res.status(500).send('Error loading dashboard: ' + e.message);
+  }
+});
+
+app.get('/management/approval', isAuthenticated, isManagement, (req, res) => {
+  const tickets = queryAll(`
+    SELECT t.*, p.nama_produk, p.tipe
+    FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+    WHERE t.status = 'approval' ORDER BY t.created_at DESC
+  `);
+  run("UPDATE notifications SET is_read = 1 WHERE role = 'management' AND is_read = 0");
+  res.render('management/approval', {
+    tickets,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/management/approval/:id', isAuthenticated, isManagement, (req, res) => {
+  try {
+    const { decision, comment } = req.body;
+    if (decision !== 'Servis' && decision !== 'Ganti Unit' && decision !== 'reject') {
+      return res.redirect('/management/approval');
+    }
+    const tick = queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
+    const tickNo = tick ? tick.ticket_no : `#${req.params.id}`;
+    if (decision === 'reject') {
+      run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'rejected', updated_at = datetime('now','localtime') WHERE id = ?",
+        [decision, comment || '', req.params.id]);
+      run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+        [req.params.id, req.session.user.id, 'reject', `Ditolak: ${comment || 'Tidak ada komentar'}`]);
+      var adminIds = getAdminIds();
+      adminIds.forEach(function(uid) {
+        run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+          [uid, `Ticket ditolak oleh Management`, `/admin/tickets/${req.params.id}`]);
+      });
+      wa.sendRejectedNotification(getAdminPhones(), tickNo);
+    } else {
+      run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
+        [decision, comment || '', req.session.user.id, req.params.id]);
+      run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+        [req.params.id, req.session.user.id, 'approve', `Disetujui: ${decision} - ${comment || ''}`]);
+      var adminIds = getAdminIds();
+      adminIds.forEach(function(uid) {
+        run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+          [uid, `Ticket disetujui Management, silakan buat jadwal`, `/admin/tickets/${req.params.id}`]);
+      });
+      wa.sendApprovedNotification(getAdminPhones(), tickNo);
+    }
+    res.redirect('/management/approval');
+  } catch (e) {
+    console.error('Approval error:', e);
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+app.get('/management/reports', isAuthenticated, isManagement, (req, res) => {
+  try {
+    const productComplaints = queryAll(`
+      SELECT COALESCE(p.nama_produk, 'Unknown') as nama_produk, COALESCE(p.tipe, '') as tipe, COUNT(*) as total
+      FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+      GROUP BY t.product_id ORDER BY total DESC
+    `);
+
+    const marketplaceComplaints = queryAll(`
+      SELECT COALESCE(marketplace, 'Unknown') as marketplace, COUNT(*) as total
+      FROM tickets GROUP BY marketplace ORDER BY total DESC
+    `);
+
+    const topIssues = queryAll(`
+      SELECT keluhan, COUNT(*) as total FROM tickets
+      WHERE keluhan IS NOT NULL GROUP BY keluhan ORDER BY total DESC LIMIT 10
+    `);
+
+    const avgResolution = queryOne(`
+      SELECT AVG(
+        julianday(substr(COALESCE(closed_at, datetime('now','localtime')),1,10)) -
+        julianday(substr(created_at,1,10))
+      ) as avg_hari FROM tickets WHERE status = 'completed'
+    `);
+
+    const topTeknisi = queryAll(`
+      SELECT u.name, COUNT(v.id) as total_visit
+      FROM visit_results v
+      JOIN users u ON v.teknisi_id = u.id
+      GROUP BY v.teknisi_id ORDER BY total_visit DESC
+    `);
+
+    const topProblemProducts = queryAll(`
+      SELECT COALESCE(p.nama_produk, 'Unknown') as nama_produk, COALESCE(p.tipe, '') as tipe, COUNT(*) as total
+      FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+      WHERE t.status IN ('completed','on_progress')
+      GROUP BY t.product_id ORDER BY total DESC LIMIT 10
+    `);
+
+    const chartProductLabels = JSON.stringify(productComplaints.map(function(p){ return p.nama_produk.replace(/'/g,'') }));
+    const chartProductData = JSON.stringify(productComplaints.map(function(p){ return p.total }));
+    const chartMarketplaceLabels = JSON.stringify(marketplaceComplaints.map(function(m){ return m.marketplace.replace(/'/g,'') }));
+    const chartMarketplaceData = JSON.stringify(marketplaceComplaints.map(function(m){ return m.total }));
+
+    res.render('management/reports', {
+      productComplaints, marketplaceComplaints, topIssues,
+      avgResolution: avgResolution ? Math.round((avgResolution.avg_hari || 0) * 10) / 10 : 0,
+      topTeknisi, topProblemProducts,
+      chartProductLabels, chartProductData, chartMarketplaceLabels, chartMarketplaceData,
+      notifCount: getNotifCount(req.session.user),
+      notifs: getNotifs(req.session.user)
+    });
+  } catch (e) {
+    console.error('Reports error:', e);
+    res.status(500).send('Error loading reports: ' + e.message);
+  }
+});
+
+/* ============= TEKNISI ROUTES ============= */
+
+app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, (req, res) => {
+  const today = todayStr();
+  const todaySchedule = queryAll(`
+    SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, t.customer_alamat,
+      t.customer_hp, t.keluhan, t.status,
+      p.nama_produk, p.tipe,
+      v.id as visit_id
+    FROM schedules s
+    JOIN tickets t ON s.ticket_id = t.id
+    LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN visit_results v ON v.ticket_id = t.id
+    WHERE s.teknisi_id = ? AND s.tanggal = ?
+    ORDER BY s.jam ASC
+  `, [req.session.user.id, today]);
+
+  const upcomingSchedule = queryAll(`
+    SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
+    FROM schedules s
+    JOIN tickets t ON s.ticket_id = t.id
+    LEFT JOIN products p ON t.product_id = p.id
+    WHERE s.teknisi_id = ?
+      AND SUBSTR(s.tanggal, 7, 4) || '-' || SUBSTR(s.tanggal, 4, 2) || '-' || SUBSTR(s.tanggal, 1, 2) > date('now','localtime')
+    ORDER BY SUBSTR(s.tanggal, 7, 4) || '-' || SUBSTR(s.tanggal, 4, 2) || '-' || SUBSTR(s.tanggal, 1, 2) ASC, s.jam ASC LIMIT 10
+  `, [req.session.user.id]);
+
+  const stats = {
+    today: todaySchedule.length,
+    completed: queryOne("SELECT COUNT(*) as c FROM visit_results v JOIN schedules s ON v.ticket_id = s.ticket_id WHERE s.teknisi_id = ?", [req.session.user.id]).c,
+    total: queryOne("SELECT COUNT(*) as c FROM schedules WHERE teknisi_id = ?", [req.session.user.id]).c
+  };
+
+  res.render('teknisi/dashboard', {
+    todaySchedule, upcomingSchedule, stats,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.get('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, (req, res) => {
+  const ticket = queryOne(`
+    SELECT t.*, p.nama_produk, p.tipe
+    FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+    WHERE t.id = ?
+  `, [req.params.ticketId]);
+
+  if (!ticket) return res.redirect('/teknisi/dashboard');
+
+  const schedule = queryOne("SELECT * FROM schedules WHERE ticket_id = ? AND teknisi_id = ?", [req.params.ticketId, req.session.user.id]);
+  const visit = queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
+
+  res.render('teknisi/visit', {
+    ticket, schedule, visit,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
+  { name: 'foto_sebelum', maxCount: 1 },
+  { name: 'foto_sesudah', maxCount: 1 },
+  { name: 'video', maxCount: 1 },
+]), validateCsrf, (req, res) => {
+  const body = req.body;
+  const files = req.files || {};
+  const now = todayStr();
+  const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  if (!body.hasil_pemeriksaan) return res.redirect(`/teknisi/visit/${req.params.ticketId}?error=pemeriksaan_required`);
+
+  const existing = queryOne("SELECT id FROM visit_results WHERE ticket_id = ?", [req.params.ticketId]);
+  if (existing) {
+    run(`UPDATE visit_results SET tanggal=?, jam=?, hasil_pemeriksaan=?, solusi=?, sparepart=?, tanggal_selesai=?,
+      foto_sebelum_path=COALESCE(?,foto_sebelum_path), foto_sesudah_path=COALESCE(?,foto_sesudah_path),
+      video_path=COALESCE(?,video_path) WHERE ticket_id=?`,
+      [now, jam, trimStr(body.hasil_pemeriksaan, 2000), trimStr(body.solusi, 1000), trimStr(body.sparepart, 500), body.tanggal_selesai ? toDDMMYYYY(body.tanggal_selesai) : now,
+       files.foto_sebelum ? files.foto_sebelum[0].filename : null,
+       files.foto_sesudah ? files.foto_sesudah[0].filename : null,
+       files.video ? files.video[0].filename : null,
+       req.params.ticketId]);
+  } else {
+    runWithResults(
+      `INSERT INTO visit_results (ticket_id, teknisi_id, tanggal, jam, hasil_pemeriksaan, solusi, sparepart,
+        foto_sebelum_path, foto_sesudah_path, video_path, tanggal_selesai)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.params.ticketId, req.session.user.id, now, jam, trimStr(body.hasil_pemeriksaan, 2000), trimStr(body.solusi, 1000), trimStr(body.sparepart, 500),
+       files.foto_sebelum ? files.foto_sebelum[0].filename : null,
+       files.foto_sesudah ? files.foto_sesudah[0].filename : null,
+       files.video ? files.video[0].filename : null,
+       body.tanggal_selesai ? toDDMMYYYY(body.tanggal_selesai) : now]
+    );
+  }
+
+  run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
+  var adminIds = getAdminIds();
+  adminIds.forEach(function(uid) {
+    run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+      [uid, `Teknisi telah mengupload hasil kunjungan untuk ticket`, `/admin/tickets/${req.params.ticketId}`]);
+  });
+
+  res.redirect(`/teknisi/visit/${req.params.ticketId}`);
+});
+
+app.post('/teknisi/visit/:ticketId/start', isAuthenticated, isTeknisi, (req, res) => {
+  run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.ticketId, req.session.user.id, 'start_visit', 'Kunjungan dimulai']);
+  res.redirect(`/teknisi/visit/${req.params.ticketId}`);
+});
+
+app.get('/teknisi/history', isAuthenticated, isTeknisi, (req, res) => {
+  const visits = queryAll(`
+    SELECT v.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
+    FROM visit_results v
+    JOIN tickets t ON v.ticket_id = t.id
+    LEFT JOIN products p ON t.product_id = p.id
+    WHERE v.teknisi_id = ?
+    ORDER BY v.created_at DESC
+  `, [req.session.user.id]);
+
+  res.render('teknisi/history', {
+    visits,
+    notifCount: getNotifCount(req.session.user),
+    notifs: getNotifs(req.session.user)
+  });
+});
+
+app.get('/management/notifications', isAuthenticated, isManagement, (req, res) => {
+  const notifs = queryAll("SELECT * FROM notifications WHERE role = 'management' AND is_read = 0 ORDER BY created_at DESC LIMIT 50");
+  res.render('management/notifications', {
+    notifs,
+    notifCount: 0
+  });
+});
+
+/* ============= NOTIFICATION API ============= */
+
+app.get('/api/notifications/count', isAuthenticated, (req, res) => {
+  res.json({ count: getNotifCount(req.session.user) });
+});
+
+app.post('/api/notifications/read/:id', isAuthenticated, (req, res) => {
+  run("DELETE FROM notifications WHERE id = ?", [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.post('/api/notifications/read-all', isAuthenticated, (req, res) => {
+  run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
+    [req.session.user.id, req.session.user.role]);
+  res.json({ ok: true });
+});
+
+app.post('/api/notifications/delete-read', isAuthenticated, (req, res) => {
+  run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 1",
+    [req.session.user.id, req.session.user.role]);
+  res.json({ ok: true });
+});
+
+app.get('/api/wa/status', isAuthenticated, (req, res) => {
+  res.json(wa.getStatus());
+});
+
+app.get('/api/wa/qr-image', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const qrDataUrl = await wa.getQRBase64();
+    if (qrDataUrl) {
+      res.json({ qr: qrDataUrl, connected: false });
+    } else {
+      res.json({ qr: null, connected: wa.getStatus().connected, message: wa.getStatus().connected ? 'Terhubung' : 'QR belum tersedia, tunggu beberapa saat...' });
+    }
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+app.post('/api/wa/reconnect', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    await wa.forceReconnect();
+    res.json({ ok: true, message: 'Memulai ulang koneksi WhatsApp...' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
+/* ============= 404 HANDLER ============= */
+app.use(function(req, res) {
+  if (req.xhr || req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.status(404).send('<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>404 - Halaman Tidak Ditemukan</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f5f5f5}.card{text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}h1{color:#dc3545;font-size:48px;margin:0 0 10px}p{color:#666;margin:0 0 20px}a{color:#0d6efd;text-decoration:none}</style></head><body><div class=\"card\"><h1>404</h1><p>Halaman tidak ditemukan</p><a href=\"/\">Kembali ke Beranda</a></div></body></html>');
+});
+
+app.listen(PORT, '0.0.0.0', () => {});

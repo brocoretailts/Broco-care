@@ -1,0 +1,164 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-plus-circle me-2"></i>Buat Ticket Baru</h4>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" id="ticketForm">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <h6 class="fw-semibold mb-3"><i class="bi bi-hash me-1"></i>Nomor Ticket</h6>
+              <input type="text" name="ticket_no" class="form-control" value="<%= ticketNo %>" readonly>
+              <div class="mt-3">
+                <label class="form-label small">Tanggal Complaint</label>
+                <input type="text" name="tanggal_complaint" class="form-control" value="<%= today %>" readonly>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-8">
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+              <h6 class="fw-semibold mb-3"><i class="bi bi-box me-1"></i>Cari Produk</h6>
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label small">Kode Barang</label>
+                  <div class="input-group">
+                    <input type="text" id="kodeBarang" name="kode_barang" class="form-control" placeholder="CCTV001" list="kodeList">
+                    <datalist id="kodeList">
+                      <% products.forEach(function(p) { %>
+                      <option value="<%= p.kode_barang %>"><%= p.nama_produk %></option>
+                      <% }) %>
+                    </datalist>
+                    <button type="button" class="btn btn-outline-primary" onclick="lookupProduct()"><i class="bi bi-search"></i></button>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Atau Pilih Produk</label>
+                  <select class="form-select" id="productSelect" onchange="selectProduct()">
+                    <option value="">-- Pilih Produk --</option>
+                    <% products.forEach(function(p) { %>
+                    <option value="<%= p.kode_barang %>" data-nama="<%= p.nama_produk %>" data-tipe="<%= p.tipe %>" data-garansi="<%= p.garansi_bulan %>"><%= p.nama_produk %> - <%= p.tipe %></option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+              <div id="productInfo" class="mt-3 p-3 bg-light rounded d-none">
+                <div class="row">
+                  <div class="col-md-4"><small class="text-secondary">Nama Produk</small><div class="fw-semibold" id="pNama">-</div></div>
+                  <div class="col-md-4"><small class="text-secondary">Tipe</small><div class="fw-semibold" id="pTipe">-</div></div>
+                  <div class="col-md-4"><small class="text-secondary">Garansi</small><div class="fw-semibold" id="pGaransi">-</div></div>
+                </div>
+                <input type="hidden" name="product_id" id="productId">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+              <h6 class="fw-semibold mb-3"><i class="bi bi-person me-1"></i>Data Customer</h6>
+              <div class="row g-2">
+                <div class="col-12"><input type="text" name="customer_name" class="form-control" placeholder="Nama Lengkap" required></div>
+                <div class="col-12"><textarea name="customer_alamat" class="form-control" rows="2" placeholder="Alamat Lengkap"></textarea></div>
+                <div class="col-6"><input type="text" name="customer_hp" class="form-control" placeholder="No HP"></div>
+                <div class="col-6"><input type="email" name="customer_email" class="form-control" placeholder="Email"></div>
+                <div class="col-6"><input type="text" name="customer_kota" class="form-control" placeholder="Kota"></div>
+                <div class="col-6"><input type="text" name="customer_provinsi" class="form-control" placeholder="Provinsi"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+              <h6 class="fw-semibold mb-3"><i class="bi bi-cart me-1"></i>Data Pembelian</h6>
+              <div class="row g-2">
+                <div class="col-6"><input type="date" name="tanggal_pembelian" class="form-control"></div>
+                <div class="col-6"><input type="text" name="toko" class="form-control" placeholder="Toko"></div>
+                <div class="col-6"><input type="text" name="marketplace" class="form-control" placeholder="Marketplace (Tokopedia/Shopee/dll)"></div>
+                <div class="col-6"><input type="text" name="nomor_invoice" class="form-control" placeholder="Nomor Invoice"></div>
+                <div class="col-12"><input type="text" name="serial_number" class="form-control" placeholder="Serial Number Produk"></div>
+                <div class="col-12">
+                  <label class="form-label small">Upload Faktur</label>
+                  <input type="file" name="faktur" class="form-control form-control-sm" accept="image/*,.pdf">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-chat-dots me-1"></i>Keluhan</h6>
+          <textarea name="keluhan" class="form-control" rows="4" placeholder="Deskripsikan keluhan customer..." required></textarea>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="fw-semibold mb-3"><i class="bi bi-camera me-1"></i>Upload Dokumentasi</h6>
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label small">Foto Produk</label>
+              <input type="file" name="foto_produk" class="form-control form-control-sm" accept="image/*" capture="environment">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Foto Kerusakan</label>
+              <input type="file" name="foto_kerusakan" class="form-control form-control-sm" accept="image/*" capture="environment">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Video (Opsional)</label>
+              <input type="file" name="video" class="form-control form-control-sm" accept="video/*" capture="environment">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-send me-1"></i>Submit Ticket</button>
+        <a href="/admin/tickets" class="btn btn-outline-secondary px-4">Batal</a>
+      </div>
+    </form>
+  </main>
+</div>
+<script>
+function lookupProduct() {
+  const kode = document.getElementById('kodeBarang').value;
+  if (!kode) return;
+  fetch('/admin/products/lookup?kode=' + encodeURIComponent(kode))
+    .then(r => r.json())
+    .then(p => {
+      if (p) showProduct(p);
+      else alert('Produk tidak ditemukan');
+    });
+}
+function selectProduct() {
+  const sel = document.getElementById('productSelect');
+  const opt = sel.options[sel.selectedIndex];
+  if (opt.value) {
+    document.getElementById('kodeBarang').value = opt.value;
+    fetch('/admin/products/lookup?kode=' + encodeURIComponent(opt.value))
+      .then(r => r.json()).then(p => { if (p) showProduct(p); });
+  }
+}
+function showProduct(p) {
+  document.getElementById('productInfo').classList.remove('d-none');
+  document.getElementById('pNama').textContent = p.nama_produk;
+  document.getElementById('pTipe').textContent = p.tipe;
+  document.getElementById('pGaransi').textContent = p.garansi_bulan + ' Bulan';
+  document.getElementById('productId').value = p.id;
+}
+</script>
+<%- include('../partials/footer') %>

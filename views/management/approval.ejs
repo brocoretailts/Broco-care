@@ -1,0 +1,80 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-check2-square me-2"></i>Approval Management</h4>
+
+    <% tickets.forEach(function(t) { %>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body">
+        <div class="row">
+          <div class="col-lg-7">
+            <h5 class="fw-bold text-primary"><%= t.ticket_no %></h5>
+            <table class="table table-sm table-borderless mb-0">
+              <tr><td class="text-secondary" style="width: 120px;">Customer</td><td class="fw-semibold"><%= t.customer_name %></td></tr>
+              <tr><td class="text-secondary">Produk</td><td><%= t.nama_produk %> <%= t.tipe ? '('+t.tipe+')' : '' %></td></tr>
+              <tr><td class="text-secondary">Keluhan</td><td><%= t.keluhan %></td></tr>
+              <tr><td class="text-secondary">Analisa Admin</td><td class="text-primary"><%= t.admin_analysis || '-' %></td></tr>
+              <tr><td class="text-secondary">Kota</td><td><%= t.customer_kota %></td></tr>
+            </table>
+          </div>
+          <div class="col-lg-5">
+            <form method="POST" action="/management/approval/<%= t.id %>">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-2">
+                <label class="form-label small fw-semibold">Keputusan</label>
+                <div class="d-flex gap-2">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="decision" value="Servis" id="servis_<%= t.id %>" required>
+                    <label class="form-check-label" for="servis_<%= t.id %>">Servis</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="decision" value="Ganti Unit" id="ganti_<%= t.id %>">
+                    <label class="form-check-label" for="ganti_<%= t.id %>">Ganti Barang</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="decision" value="reject" id="tolak_<%= t.id %>">
+                    <label class="form-check-label text-danger" for="tolak_<%= t.id %>">Tolak Claim</label>
+                  </div>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Komentar</label>
+                <textarea name="comment" class="form-control" rows="2" placeholder="Opsional: alasan atau catatan..."></textarea>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success approveBtn"><i class="bi bi-check-lg"></i> PROSES</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+    <% if (tickets.length === 0) { %>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <i class="bi bi-check2-all text-success" style="font-size: 3rem;"></i>
+        <p class="mt-2 text-secondary">Semua ticket sudah diproses</p>
+      </div>
+    </div>
+    <% } %>
+  </main>
+</div>
+<script>
+document.querySelectorAll('input[name="decision"]').forEach(function(radio) {
+  radio.addEventListener('change', function() {
+    var form = this.closest('form');
+    var btn = form.querySelector('.approveBtn');
+    if (this.value === 'reject') {
+      btn.className = 'btn btn-danger approveBtn';
+      btn.innerHTML = '<i class="bi bi-x-lg"></i> REJECT';
+    } else {
+      btn.className = 'btn btn-success approveBtn';
+      btn.innerHTML = '<i class="bi bi-check-lg"></i> APPROVE';
+    }
+  });
+});
+</script>
+<%- include('../partials/footer') %>
+

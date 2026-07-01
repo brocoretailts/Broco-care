@@ -1,0 +1,77 @@
+<nav class="sidebar border-end" id="sidebarMenu">
+  <div class="sidebar-header">
+    <a href="/dashboard" class="text-decoration-none text-white d-flex align-items-center gap-2">
+      <img src="/images/logo.png" alt="Broco" style="height:28px;">
+      <h5 class="mb-0">Broco CMS</h5>
+    </a>
+    <button type="button" class="btn-close btn-close-white d-md-none" onclick="toggleSidebar()"></button>
+  </div>
+  <div class="sidebar-user px-3 py-2 border-bottom">
+    <small class="text-secondary">Logged in as</small>
+    <div class="fw-semibold"><%= user.name %></div>
+    <span class="badge bg-<%= user.role === 'admin' ? 'primary' : user.role === 'management' ? 'warning' : 'info' %>">
+      <%= user.role.charAt(0).toUpperCase() + user.role.slice(1) %>
+    </span>
+  </div>
+  <div class="sidebar-menu">
+    <% if (user.role === 'admin') { %>
+      <a href="/admin/dashboard" class="sidebar-link <%= path.includes('dashboard') ? 'active' : '' %>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard
+      </a>
+      <a href="/admin/tickets" class="sidebar-link <%= path.includes('/tickets') ? 'active' : '' %>">
+        <i class="bi bi-ticket me-2"></i> Daftar Ticket
+        <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
+      </a>
+      <a href="/admin/tickets/create" class="sidebar-link <%= path.includes('create') ? 'active' : '' %>">
+        <i class="bi bi-plus-circle me-2"></i> Buat Ticket
+      </a>
+      <a href="/admin/calendar" class="sidebar-link <%= path.includes('calendar') ? 'active' : '' %>">
+        <i class="bi bi-calendar3 me-2"></i> Kalender Jadwal
+      </a>
+      <a href="/admin/products" class="sidebar-link <%= path.includes('products') ? 'active' : '' %>">
+        <i class="bi bi-box me-2"></i> Master Produk
+      </a>
+      <a href="/admin/teknisi" class="sidebar-link <%= path.includes('teknisi') ? 'active' : '' %>">
+        <i class="bi bi-people me-2"></i> Master Teknisi
+      </a>
+      <a href="/admin/whatsapp" class="sidebar-link <%= path.includes('whatsapp') ? 'active' : '' %>">
+        <i class="bi bi-whatsapp me-2"></i> WhatsApp
+      </a>
+      <a href="/admin/settings" class="sidebar-link <%= path.includes('settings') ? 'active' : '' %>">
+        <i class="bi bi-gear me-2"></i> Pengaturan
+      </a>
+      <a href="/admin/notifications" class="sidebar-link <%= path.includes('notifications') ? 'active' : '' %>">
+        <i class="bi bi-bell me-2"></i> Notifikasi
+        <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
+      </a>
+    <% } else if (user.role === 'management') { %>
+      <a href="/management/dashboard" class="sidebar-link <%= path.includes('dashboard') ? 'active' : '' %>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard
+      </a>
+      <a href="/management/approval" class="sidebar-link <%= path.includes('approval') ? 'active' : '' %>">
+        <i class="bi bi-check2-square me-2"></i> Approval
+        <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
+      </a>
+      <a href="/management/reports" class="sidebar-link <%= path.includes('reports') ? 'active' : '' %>">
+        <i class="bi bi-bar-chart me-2"></i> Laporan
+      </a>
+      <a href="/management/notifications" class="sidebar-link <%= path.includes('notifications') ? 'active' : '' %>">
+        <i class="bi bi-bell me-2"></i> Notifikasi
+        <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
+      </a>
+    <% } else if (user.role === 'teknisi') { %>
+      <a href="/teknisi/dashboard" class="sidebar-link <%= path.includes('dashboard') ? 'active' : '' %>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard
+      </a>
+      <a href="/teknisi/history" class="sidebar-link <%= path.includes('history') ? 'active' : '' %>">
+        <i class="bi bi-clock-history me-2"></i> Riwayat
+      </a>
+    <% } %>
+  </div>
+  <div class="sidebar-footer border-top mt-auto">
+    <a href="/logout" class="sidebar-link text-danger">
+      <i class="bi bi-box-arrow-left me-2"></i> Logout
+    </a>
+  </div>
+</nav>
+<div class="sidebar-overlay d-md-none" id="sidebarOverlay" onclick="toggleSidebar()"></div>

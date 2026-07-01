@@ -1,0 +1,120 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-whatsapp me-2"></i>WhatsApp Notification</h4>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white fw-semibold">Status Koneksi</div>
+          <div class="card-body text-center py-4">
+            <div id="waStatusBadge">
+              <span class="badge bg-secondary fs-6">Memeriksa...</span>
+            </div>
+            <p class="mt-2 mb-0 text-secondary small" id="waStatusText">Menghubungkan ke WhatsApp...</p>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold">Cara Penggunaan</div>
+          <div class="card-body small">
+            <ol class="mb-0 ps-3">
+              <li class="mb-1">Pastikan nomor HP <strong>Management</strong>, <strong>Admin</strong>, dan <strong>Teknisi</strong> sudah terisi di masing-masing profil.</li>
+              <li class="mb-1">Klik tombol <strong>"Hubungkan WhatsApp"</strong> di halaman ini.</li>
+              <li class="mb-1">Buka WhatsApp di HP &rarr; <strong>Settings (Setelan) &rarr; Linked Devices (Perangkat Tertaut)</strong>.</li>
+              <li class="mb-1">Scan QR Code yang muncul.</li>
+              <li class="mb-1">Selesai! Notifikasi otomatis terkirim ke nomor yang terdaftar.</li>
+            </ol>
+            <hr>
+            <p class="mb-0 text-warning"><i class="bi bi-info-circle"></i> Nomor tujuan diambil dari field <strong>No. HP</strong> di Master Teknisi. Pastikan nomor sudah benar (gunakan format Indonesia: 0812xxx).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">QR Code</span>
+            <div>
+              <button class="btn btn-sm btn-outline-primary" onclick="refreshQR()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="reconnectWA()"><i class="bi bi-plug"></i> Reset Koneksi</button>
+            </div>
+          </div>
+          <div class="card-body text-center py-4" id="qrContainer">
+            <div class="text-secondary py-5">
+              <i class="bi bi-qr-code" style="font-size: 3rem;"></i>
+              <p class="mt-2">Memuat QR Code...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-white fw-semibold">Log Notifikasi WhatsApp</div>
+      <div class="card-body">
+        <p class="small text-secondary mb-2">Notifikasi WhatsApp terkirim secara otomatis saat:</p>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead><tr><th>Event</th><th>Dikirim Ke</th><th>Pesan</th></tr></thead>
+            <tbody>
+              <tr><td>Ticket Baru</td><td>Management</td><td>🔔 Approval Dibutuhkan</td></tr>
+              <tr><td>Dikirim ke Approval</td><td>Management</td><td>🔔 Approval Dibutuhkan</td></tr>
+              <tr><td>Management Approve</td><td>Admin</td><td>✅ Ticket Disetujui</td></tr>
+              <tr><td>Management Reject</td><td>Admin</td><td>❌ Ticket Ditolak</td></tr>
+              <tr><td>Jadwal Dibuat/Diubah</td><td>Teknisi</td><td>📅 Jadwal Kunjungan Baru</td></tr>
+              <tr><td>Jadwal Dibatalkan</td><td>Teknisi</td><td>⚠️ Jadwal Dibatalkan</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function checkStatus() {
+  fetch('/api/wa/status').then(function(r) { return r.json(); }).then(function(data) {
+    var badge = document.getElementById('waStatusBadge');
+    var text = document.getElementById('waStatusText');
+    if (data.connected) {
+      badge.innerHTML = '<span class="badge bg-success fs-6"><i class="bi bi-check-circle"></i> Terhubung</span>';
+      text.innerHTML = 'WhatsApp siap mengirim notifikasi.';
+    } else {
+      badge.innerHTML = '<span class="badge bg-danger fs-6"><i class="bi bi-x-circle"></i> Tidak Terhubung</span>';
+      text.innerHTML = 'WhatsApp belum terhubung. Scan QR Code di samping.';
+    }
+  });
+}
+
+function refreshQR() {
+  var container = document.getElementById('qrContainer');
+  container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Memuat ulang...</p></div>';
+  fetch('/api/wa/qr-image').then(function(r) { return r.json(); }).then(function(data) {
+    if (data.qr) {
+      container.innerHTML = '<img src="' + data.qr + '" style="width:250px;height:250px" class="img-fluid"><p class="mt-2 small text-secondary">Scan dengan WhatsApp > Settings > Linked Devices</p>';
+    } else if (data.connected) {
+      container.innerHTML = '<div class="text-success py-5"><i class="bi bi-check-circle" style="font-size: 3rem;"></i><p class="mt-2 fw-semibold">WhatsApp Terhubung!</p></div>';
+    } else {
+      container.innerHTML = '<div class="text-secondary py-5"><p>' + (data.message || 'QR belum tersedia') + '</p><button class="btn btn-primary mt-2" onclick="refreshQR()">Coba Lagi</button></div>';
+    }
+    checkStatus();
+  }).catch(function() {
+    container.innerHTML = '<div class="text-danger py-5"><p>Gagal memuat QR</p></div>';
+  });
+}
+
+function reconnectWA() {
+  if (!confirm('Reset koneksi WhatsApp? Anda perlu scan QR code ulang.')) return;
+  var container = document.getElementById('qrContainer');
+  container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Mereset koneksi...</p></div>';
+  fetch('/api/wa/reconnect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function() {
+    setTimeout(refreshQR, 5000);
+  });
+}
+
+checkStatus();
+setTimeout(refreshQR, 1000);
+</script>
+<%- include('../partials/footer') %>

@@ -1,0 +1,497 @@
+<%- include('../partials/header') %>
+<div class="no-print">
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
+      <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Cetak PDF</button>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0"><%= ticket.ticket_no %></h5>
+            <% var statusM = {waiting:['Waiting','warning'],approval:['Approval','warning text-white'],scheduled:['Scheduled','primary'],on_progress:['On Progress','purple'],completed:['Completed','success'],rejected:['Rejected','danger']} %>
+            <% var sm = statusM[ticket.status] || ['Unknown','secondary'] %>
+            <span class="badge bg-<%= sm[1] %> fs-6"><%= sm[0] %></span>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-person me-1"></i>Customer</h6>
+                <p class="mb-1 fw-semibold"><%= ticket.customer_name %></p>
+                <p class="mb-1 small text-secondary"><%= ticket.customer_alamat %></p>
+                <p class="mb-1 small"><%= ticket.customer_kota %>, <%= ticket.customer_provinsi %></p>
+                <p class="mb-0 small"><i class="bi bi-telephone"></i> <%= ticket.customer_hp %></p>
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-box me-1"></i>Produk</h6>
+                <p class="mb-1 fw-semibold"><%= ticket.nama_produk || '-' %></p>
+                <p class="mb-1 small">Tipe: <%= ticket.tipe || '-' %> | SN: <%= ticket.serial_number || '-' %></p>
+                <p class="mb-0 small">Garansi: <%= ticket.garansi_bulan || 0 %> Bulan | Kode: <%= ticket.kode_barang %></p>
+              </div>
+              <div class="col-12">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-cart me-1"></i>Pembelian</h6>
+                <p class="mb-1 small">Tgl Beli: <%= ticket.tanggal_pembelian || '-' %> | Toko: <%= ticket.toko || '-' %> | <%= ticket.marketplace || '-' %></p>
+                <p class="mb-0 small">Invoice: <%= ticket.nomor_invoice || '-' %></p>
+              </div>
+              <div class="col-12">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-chat-dots me-1"></i>Keluhan</h6>
+                <p class="mb-0"><%= ticket.keluhan %></p>
+              </div>
+              <% if (ticket.admin_analysis) { %>
+              <div class="col-12">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-search me-1"></i>Analisa Admin</h6>
+                <p class="mb-0"><%= ticket.admin_analysis %></p>
+              </div>
+              <% } %>
+              <% if (ticket.management_decision) { %>
+              <div class="col-12">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-check2-square me-1"></i>Keputusan Management</h6>
+                <p class="mb-0 fw-semibold"><%= ticket.management_decision %></p>
+                <% if (ticket.management_comment) { %><p class="mb-0 small text-secondary"><%= ticket.management_comment %></p><% } %>
+              </div>
+              <% } %>
+            </div>
+            <div class="row g-2 mt-3">
+              <% if (ticket.faktur_path) { %>
+              <div class="col-md-6">
+                <label class="small text-secondary fw-semibold">Faktur Pembelian</label>
+                <% if (ticket.faktur_path.endsWith('.pdf')) { %>
+                  <a href="/uploads/<%= ticket.faktur_path %>" target="_blank" class="btn btn-sm btn-outline-info d-block mt-1"><i class="bi bi-file-earmark-pdf"></i> Lihat PDF Faktur</a>
+                <% } else { %>
+                  <a href="/uploads/<%= ticket.faktur_path %>" target="_blank">
+                    <img src="/uploads/<%= ticket.faktur_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                  </a>
+                <% } %>
+              </div>
+              <% } %>
+              <% if (ticket.foto_produk_path) { %>
+              <div class="col-md-6">
+                <label class="small text-secondary fw-semibold">Foto Produk</label>
+                <a href="/uploads/<%= ticket.foto_produk_path %>" target="_blank">
+                  <img src="/uploads/<%= ticket.foto_produk_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                </a>
+              </div>
+              <% } %>
+              <% if (ticket.foto_kerusakan_path) { %>
+              <div class="col-md-6">
+                <label class="small text-secondary fw-semibold">Foto Kerusakan</label>
+                <a href="/uploads/<%= ticket.foto_kerusakan_path %>" target="_blank">
+                  <img src="/uploads/<%= ticket.foto_kerusakan_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                </a>
+              </div>
+              <% } %>
+              <% if (ticket.video_path) { %>
+              <div class="col-md-6">
+                <label class="small text-secondary fw-semibold">Video</label>
+                <video controls class="w-100 rounded border mt-1" style="max-height:200px">
+                  <source src="/uploads/<%= ticket.video_path %>">
+                </video>
+              </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white">
+            <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-1"></i>Tracking Timeline</h6>
+          </div>
+          <div class="card-body">
+            <div class="timeline">
+              <% var steps = [
+                {label:'Complaint Masuk', done: true, date: ticket.created_at},
+                {label:'Approval Management', done: ticket.status !== 'waiting', date: ticket.approved_at},
+                {label:'Jadwal Teknisi', done: schedule ? true : false, date: schedule ? (schedule.tanggal + ' ' + schedule.jam) : null},
+                {label:'Kunjungan', done: visit ? true : false, date: visit ? (visit.tanggal + ' ' + visit.jam) : null},
+                {label:'Selesai / Closed', done: ticket.status === 'completed' || ticket.status === 'rejected', date: ticket.closed_at}
+              ] %>
+              <% steps.forEach(function(step, i) { %>
+              <div class="timeline-item <%= step.done ? 'done' : '' %>">
+                <div class="timeline-marker <%= step.done ? 'bg-success' : 'bg-secondary' %>">
+                  <% if (step.done) { %><i class="bi bi-check-lg"></i><% } else { %><i class="bi bi-record"></i><% } %>
+                </div>
+                <div class="timeline-content">
+                  <div class="fw-semibold"><%= step.label %></div>
+                  <% if (step.date) { %><div class="small text-secondary"><%= step.date %></div><% } %>
+                </div>
+              </div>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white">
+            <h6 class="fw-bold mb-0"><i class="bi bi-activity me-1"></i>Activity Log</h6>
+          </div>
+          <div class="card-body py-2">
+            <% logs.forEach(function(log) { %>
+            <div class="d-flex justify-content-between py-1 border-bottom small">
+              <span><span class="fw-semibold"><%= log.user_name || '-' %></span>: <%= log.description %></span>
+              <span class="text-secondary"><%= log.created_at %></span>
+            </div>
+            <% }) %>
+            <% if (logs.length === 0) { %><p class="text-secondary small mb-0">Belum ada aktivitas</p><% } %>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <% if (ticket.status === 'waiting' && !ticket.admin_analysis) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-pencil me-1"></i>Analisa Admin</h6></div>
+          <div class="card-body">
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/analysis">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-2">
+                <textarea name="admin_analysis" class="form-control" rows="3" placeholder="Tulis analisa awal..."></textarea>
+              </div>
+              <button type="submit" class="btn btn-warning w-100"><i class="bi bi-send"></i> Kirim ke Management</button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+        <% if (ticket.status === 'approval') { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body text-center">
+            <i class="bi bi-hourglass-split text-warning" style="font-size: 2rem;"></i>
+            <p class="mb-0 mt-2">Menunggu approval Management</p>
+          </div>
+        </div>
+        <% } %>
+        <% if (ticket.status === 'waiting' && ticket.admin_analysis && ticket.approved_by) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-calendar me-1"></i>Buat Jadwal</h6></div>
+          <div class="card-body">
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/schedule">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-2">
+                <label class="form-label small">Pilih Teknisi</label>
+                <select name="teknisi_id" class="form-select" required>
+                  <option value="">-- Pilih --</option>
+                  <% teknisi.forEach(function(t) { %>
+                  <option value="<%= t.id %>" <%= schedule && schedule.teknisi_id == t.id ? 'selected' : '' %>><%= t.name %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Tanggal</label>
+                <input type="date" name="tanggal" class="form-control" value="<%= schedule ? schedule.tanggal : '' %>" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Jam</label>
+                <input type="time" name="jam" class="form-control" value="<%= schedule ? schedule.jam : '' %>" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">Catatan</label>
+                <textarea name="notes" class="form-control" rows="2"><%= schedule ? schedule.notes : '' %></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary w-100"><i class="bi bi-calendar-check"></i> Simpan Jadwal</button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+        <% if (ticket.status === 'scheduled' && schedule) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0"><i class="bi bi-calendar-check me-1"></i>Jadwal</h6>
+            <span class="badge bg-primary">Terjadwal</span>
+          </div>
+          <div class="card-body">
+            <p class="mb-1"><strong>Teknisi:</strong> <%= schedule.teknisi_name %></p>
+            <p class="mb-1"><strong>Tanggal:</strong> <%= schedule.tanggal %></p>
+            <p class="mb-1"><strong>Jam:</strong> <%= schedule.jam %></p>
+            <% if (schedule.notes) { %><p class="mb-0 small"><%= schedule.notes %></p><% } %>
+            <hr>
+            <p class="small text-secondary mb-2"><i class="bi bi-pencil"></i> Ubah Jadwal:</p>
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/schedule" class="mb-2">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-1">
+                <select name="teknisi_id" class="form-select form-select-sm">
+                  <% teknisi.forEach(function(t) { %>
+                  <option value="<%= t.id %>" <%= schedule.teknisi_id == t.id ? 'selected' : '' %>><%= t.name %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div class="row g-1 mb-1">
+                <div class="col-6"><input type="date" name="tanggal" class="form-control form-control-sm" value="<%= schedule.tanggal %>"></div>
+                <div class="col-6"><input type="time" name="jam" class="form-control form-control-sm" value="<%= schedule.jam %>"></div>
+              </div>
+              <textarea name="notes" class="form-control form-control-sm mb-1" rows="1"><%= schedule.notes || '' %></textarea>
+              <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-calendar-check"></i> Update Jadwal</button>
+            </form>
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/cancel-schedule" onsubmit="return confirm('Batalkan jadwal ini? Teknisi akan diberitahu.')">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Batalkan Jadwal</button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+        <% if (visit) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-clipboard-check me-1"></i>Hasil Kunjungan</h6></div>
+          <div class="card-body">
+            <p class="mb-1"><strong>Tanggal:</strong> <%= visit.tanggal %> <%= visit.jam %></p>
+            <p class="mb-1"><strong>Pemeriksaan:</strong><br><%= visit.hasil_pemeriksaan %></p>
+            <p class="mb-1"><strong>Solusi:</strong> <%= visit.solusi %></p>
+            <% if (visit.sparepart) { %><p class="mb-1"><strong>Sparepart:</strong> <%= visit.sparepart %></p><% } %>
+            <p class="mb-0"><strong>Selesai:</strong> <%= visit.tanggal_selesai %></p>
+            <div class="row g-1 mt-2">
+              <% if (visit.foto_sebelum_path) { %>
+              <div class="col-6">
+                <small class="text-secondary d-block">Foto Sebelum</small>
+                <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank">
+                  <img src="/uploads/<%= visit.foto_sebelum_path %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
+                </a>
+              </div>
+              <% } %>
+              <% if (visit.foto_sesudah_path) { %>
+              <div class="col-6">
+                <small class="text-secondary d-block">Foto Sesudah</small>
+                <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank">
+                  <img src="/uploads/<%= visit.foto_sesudah_path %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
+                </a>
+              </div>
+              <% } %>
+              <% if (visit.video_path) { %>
+              <div class="col-12">
+                <small class="text-secondary d-block">Video</small>
+                <video controls class="w-100 rounded border" style="max-height:120px">
+                  <source src="/uploads/<%= visit.video_path %>">
+                </video>
+              </div>
+              <% } %>
+            </div>
+          </div>
+        </div>
+        <% } %>
+        <% if (ticket.status === 'on_progress') { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body">
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/close">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button type="submit" class="btn btn-success w-100" onclick="return confirm('Tutup ticket ini?')">
+                <i class="bi bi-check-circle"></i> Tutup Ticket (Completed)
+              </button>
+            </form>
+          </div>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+<%- include('../partials/footer') %>
+
+<div class="print-area">
+  <div class="p-detail-wrap">
+
+    <!-- HEADER -->
+    <div class="p-top-wrap">
+      <div class="p-top-left">
+        <div class="p-top-logo">Broco <small>Smart Care</small></div>
+        <div class="p-top-sub">BROCO SMART CARE - Complaint Management System</div>
+      </div>
+      <div class="p-top-right">
+        <div class="p-top-ticket-box">
+          <div class="p-top-ticket-no">#<%= ticket.ticket_no %></div>
+          <div class="p-top-date">Tgl Masuk: <%= ticket.created_at %></div>
+          <span class="p-top-status"><%= ticket.status.toUpperCase().replace('_',' ') %></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 1: DATA PELANGGAN + DETAIL PRODUK -->
+    <div class="p-row">
+      <!-- DATA PELANGGAN -->
+      <div class="p-card">
+        <div class="p-card-header"><span class="p-icon">&#128100;</span> DATA PELANGGAN</div>
+        <div class="p-card-body">
+          <table>
+            <tr><td class="p-label-cell">Nama</td><td class="p-value-cell"><%= ticket.customer_name %></td></tr>
+            <tr><td class="p-label-cell">Alamat</td><td class="p-value-cell"><%= ticket.customer_alamat %></td></tr>
+            <tr><td class="p-label-cell">Kota</td><td class="p-value-cell"><%= ticket.customer_kota %>, <%= ticket.customer_provinsi %></td></tr>
+            <tr><td class="p-label-cell">HP</td><td class="p-value-cell"><%= ticket.customer_hp %></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <!-- DETAIL PRODUK & PEMBELIAN -->
+      <div class="p-card">
+        <div class="p-card-header"><span class="p-icon">&#128230;</span> DETAIL PRODUK &amp; PEMBELIAN</div>
+        <div class="p-card-body">
+          <table>
+            <tr><td class="p-label-cell">Nama</td><td class="p-value-cell"><%= ticket.nama_produk || '-' %></td>
+                <td class="p-label-cell">Tanggal</td><td class="p-value-cell"><%= ticket.tanggal_pembelian || '-' %></td></tr>
+            <tr><td class="p-label-cell">Tipe</td><td class="p-value-cell"><%= ticket.tipe || '-' %></td>
+                <td class="p-label-cell">Toko</td><td class="p-value-cell"><%= ticket.toko || '-' %></td></tr>
+            <tr><td class="p-label-cell">Kode</td><td class="p-value-cell"><%= ticket.kode_barang %></td>
+                <td class="p-label-cell">Marketplace</td><td class="p-value-cell"><%= ticket.marketplace || '-' %></td></tr>
+            <tr><td class="p-label-cell">Serial</td><td class="p-value-cell"><%= ticket.serial_number || '-' %></td>
+                <td class="p-label-cell">Invoice</td><td class="p-value-cell"><%= ticket.nomor_invoice || '-' %></td></tr>
+            <tr><td class="p-label-cell">Garansi</td><td class="p-value-cell"><%= ticket.garansi_bulan || 0 %> bln</td>
+                <td class="p-label-cell"></td><td class="p-value-cell"></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ROW 2: KELUHAN & PENANGANAN + JADWAL TEKNISI -->
+    <div class="p-row">
+      <!-- KELUHAN & PENANGANAN -->
+      <div class="p-card wide">
+        <div class="p-card-header"><span class="p-icon">&#9888;</span> KELUHAN &amp; PENANGANAN</div>
+        <div class="p-card-body">
+          <div class="p-alert-box p-alert-blue">
+            <div class="p-alert-title">Keluhan Pelanggan:</div>
+            <%= ticket.keluhan %>
+          </div>
+          <% if (ticket.admin_analysis) { %>
+          <div class="p-alert-box p-alert-green">
+            <div class="p-alert-title">Analisa Admin:</div>
+            <%= ticket.admin_analysis %>
+          </div>
+          <% } %>
+          <% if (ticket.management_decision) { %>
+          <div class="p-alert-box p-alert-orange">
+            <div class="p-alert-title">Keputusan Management:</div>
+            <b><%= ticket.management_decision %></b><% if (ticket.management_comment) { %> &mdash; <%= ticket.management_comment %><% } %>
+          </div>
+          <% } %>
+          <% if (ticket.faktur_path || ticket.foto_produk_path || ticket.foto_kerusakan_path || ticket.video_path) { %>
+          <div class="p-alert-box p-alert-gray" style="background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:12px;margin-top:12px;">
+            <div class="p-alert-title">File Upload:</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+              <% if (ticket.faktur_path) { %>
+                <div style="text-align:center;width:140px;">
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Faktur</div>
+                  <% if (ticket.faktur_path.endsWith('.pdf')) { %>
+                    <a href="/uploads/<%= ticket.faktur_path %>" target="_blank" style="display:block;padding:8px;background:#e3f2fd;border-radius:4px;text-decoration:none;color:#1565c0;font-size:12px;">Lihat PDF</a>
+                  <% } else { %>
+                    <a href="/uploads/<%= ticket.faktur_path %>" target="_blank"><img src="/uploads/<%= ticket.faktur_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                  <% } %>
+                </div>
+              <% } %>
+              <% if (ticket.foto_produk_path) { %>
+                <div style="text-align:center;width:140px;">
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Produk</div>
+                  <a href="/uploads/<%= ticket.foto_produk_path %>" target="_blank"><img src="/uploads/<%= ticket.foto_produk_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                </div>
+              <% } %>
+              <% if (ticket.foto_kerusakan_path) { %>
+                <div style="text-align:center;width:140px;">
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Kerusakan</div>
+                  <a href="/uploads/<%= ticket.foto_kerusakan_path %>" target="_blank"><img src="/uploads/<%= ticket.foto_kerusakan_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                </div>
+              <% } %>
+              <% if (ticket.video_path) { %>
+                <div style="text-align:center;width:140px;">
+                  <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Video</div>
+                  <video style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;" controls>
+                    <source src="/uploads/<%= ticket.video_path %>">
+                  </video>
+                </div>
+              <% } %>
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- JADWAL TEKNISI -->
+      <div class="p-card narrow">
+        <div class="p-card-header"><span class="p-icon">&#128295;</span> JADWAL TEKNISI</div>
+        <div class="p-card-body">
+          <table>
+            <tr><td class="p-label-cell">Teknisi</td><td class="p-value-cell"><%= schedule ? (schedule.teknisi_name || '-') : '-' %></td></tr>
+            <tr><td class="p-label-cell">Tanggal</td><td class="p-value-cell"><%= schedule ? schedule.tanggal : '-' %></td></tr>
+            <tr><td class="p-label-cell">Jam</td><td class="p-value-cell"><%= schedule ? schedule.jam : '-' %></td></tr>
+            <% if (schedule && schedule.notes) { %>
+            <tr><td class="p-label-cell">Catatan</td><td class="p-value-cell"><%= schedule.notes %></td></tr>
+            <% } %>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- HASIL KUNJUNGAN (if exists) -->
+    <% if (visit) { %>
+    <div class="p-row">
+      <div class="p-card">
+        <div class="p-card-header"><span class="p-icon">&#128203;</span> HASIL KUNJUNGAN</div>
+        <div class="p-card-body">
+          <div class="p-alert-box p-alert-green">
+            <div class="p-alert-title">Pemeriksaan:</div>
+            <%= visit.hasil_pemeriksaan %>
+          </div>
+          <div class="p-alert-box p-alert-blue">
+            <div class="p-alert-title">Solusi:</div>
+            <%= visit.solusi %><% if (visit.sparepart) { %> | Sparepart: <%= visit.sparepart %><% } %>
+          </div>
+          <table><tr><td class="p-label-cell">Tanggal Selesai</td><td class="p-value-cell"><%= visit.tanggal_selesai %></td></tr></table>
+          <% if (visit.foto_sebelum_path || visit.foto_sesudah_path || visit.video_path) { %>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+            <% if (visit.foto_sebelum_path) { %>
+              <div style="text-align:center;width:140px;">
+                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Sebelum</div>
+                <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank"><img src="/uploads/<%= visit.foto_sebelum_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+              </div>
+            <% } %>
+            <% if (visit.foto_sesudah_path) { %>
+              <div style="text-align:center;width:140px;">
+                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Sesudah</div>
+                <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank"><img src="/uploads/<%= visit.foto_sesudah_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+              </div>
+            <% } %>
+            <% if (visit.video_path) { %>
+              <div style="text-align:center;width:140px;">
+                <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Video</div>
+                <video style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;" controls>
+                  <source src="/uploads/<%= visit.video_path %>">
+                </video>
+              </div>
+            <% } %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- ROW 3: RIWAYAT STATUS -->
+    <div class="p-card">
+      <div class="p-card-header"><span class="p-icon">&#128196;</span> RIWAYAT STATUS</div>
+      <div class="p-card-body">
+        <div class="p-timeline">
+          <% 
+          var steps = [
+            {label:'Complaint Masuk', date: ticket.created_at, done: true},
+            {label:'Approval Management', date: ticket.approved_at || '-', done: !!ticket.approved_at},
+            {label:'Jadwal Teknisi', date: schedule ? (schedule.tanggal + ' ' + schedule.jam) : '-', done: !!schedule},
+            {label:'Kunjungan', date: visit ? (visit.tanggal + ' ' + visit.jam) : '-', done: !!visit},
+            {label:'Selesai / Closed', date: ticket.closed_at || '-', done: !!ticket.closed_at}
+          ];
+          %>
+          <% steps.forEach(function(s) { %>
+          <div class="p-timeline-item">
+            <div class="p-timeline-dot <%= s.done ? 'done' : 'pending' %>"></div>
+            <div class="p-timeline-label"><%= s.label %></div>
+            <div class="p-timeline-date"><%= s.date %></div>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="p-footer-bar">
+      Dicetak pada: <%= new Date().toLocaleDateString('id-ID', {year:'numeric',month:'long',day:'numeric'}) %>
+    </div>
+
+  </div>
+</div>

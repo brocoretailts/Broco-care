@@ -1,0 +1,83 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-speedometer2 me-2"></i>Dashboard Teknisi</h4>
+
+    <div class="row g-3 mb-4">
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="stat-value text-primary"><%= stats.today %></div>
+          <div class="stat-label">Hari Ini</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="stat-value text-success"><%= stats.completed %></div>
+          <div class="stat-label">Selesai</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="stat-value text-info"><%= stats.total %></div>
+          <div class="stat-label">Total Tugas</div>
+        </div>
+      </div>
+    </div>
+
+    <h5 class="fw-semibold mb-3"><i class="bi bi-calendar-day me-1"></i>Jadwal Hari Ini</h5>
+    <% if (todaySchedule.length === 0) { %>
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-4 text-secondary">Tidak ada jadwal hari ini</div>
+    </div>
+    <% } %>
+    <% todaySchedule.forEach(function(s) { %>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-auto text-center">
+            <div class="fw-bold fs-4 text-primary"><%= s.jam %></div>
+          </div>
+          <div class="col">
+            <h6 class="fw-bold mb-1"><%= s.customer_name %></h6>
+            <p class="mb-1 small"><%= s.nama_produk %> - <%= s.ticket_no %></p>
+            <p class="mb-0 small text-secondary"><i class="bi bi-geo-alt"></i> <%= s.customer_kota %>, <%= s.customer_alamat %></p>
+            <p class="mb-0 small"><i class="bi bi-telephone"></i> <%= s.customer_hp %></p>
+            <p class="mb-0 small text-warning">Keluhan: <%= s.keluhan %></p>
+          </div>
+          <div class="col-auto">
+            <% if (!s.visit_id) { %>
+            <a href="/teknisi/visit/<%= s.ticket_id %>" class="btn btn-primary"><i class="bi bi-arrow-right"></i> Mulai</a>
+            <% } else { %>
+            <span class="badge bg-success"><i class="bi bi-check"></i> Selesai</span>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+
+    <% if (upcomingSchedule.length > 0) { %>
+    <h5 class="fw-semibold mb-3 mt-4"><i class="bi bi-calendar-week me-1"></i>Jadwal Mendatang</h5>
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Tanggal</th><th>Jam</th><th>Customer</th><th>Produk</th><th>Kota</th></tr></thead>
+          <tbody>
+            <% upcomingSchedule.forEach(function(s) { %>
+            <tr>
+              <td><%= s.tanggal %></td>
+              <td><%= s.jam %></td>
+              <td><%= s.customer_name %></td>
+              <td><%= s.nama_produk %></td>
+              <td><%= s.customer_kota %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+  </main>
+</div>
+<%- include('../partials/footer') %>

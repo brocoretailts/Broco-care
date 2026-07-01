@@ -1,0 +1,82 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-box me-2"></i>Master Produk</h4>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal"><i class="bi bi-plus"></i> Tambah Produk</button>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Kode Barang</th><th>Nama Produk</th><th>Tipe</th><th>Garansi</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% products.forEach(function(p) { %>
+            <tr>
+              <td class="fw-semibold"><%= p.kode_barang %></td>
+              <td><%= p.nama_produk %></td>
+              <td><%= p.tipe %></td>
+              <td><%= p.garansi_bulan %> Bulan</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#editProductModal<%= p.id %>"><i class="bi bi-pencil"></i></button>
+                <form method="POST" action="/admin/products/<%= p.id %>/delete" onsubmit="return confirm('Hapus produk?')" class="d-inline">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="modal fade" id="addProductModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="POST" action="/admin/products">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <div class="modal-header"><h5 class="modal-title">Tambah Produk</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <div class="mb-2"><label class="form-label small">Kode Barang</label><input type="text" name="kode_barang" class="form-control" required></div>
+              <div class="mb-2"><label class="form-label small">Nama Produk</label><input type="text" name="nama_produk" class="form-control" required></div>
+              <div class="mb-2"><label class="form-label small">Tipe</label><input type="text" name="tipe" class="form-control"></div>
+              <div class="mb-2"><label class="form-label small">Garansi (Bulan)</label><input type="number" name="garansi_bulan" class="form-control" value="12"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+              <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <% products.forEach(function(p) { %>
+    <div class="modal fade" id="editProductModal<%= p.id %>">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="POST" action="/admin/products/<%= p.id %>/edit">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <div class="modal-header"><h5 class="modal-title">Edit Produk</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <div class="mb-2"><label class="form-label small">Kode Barang</label><input type="text" name="kode_barang" class="form-control" value="<%= p.kode_barang %>" required></div>
+              <div class="mb-2"><label class="form-label small">Nama Produk</label><input type="text" name="nama_produk" class="form-control" value="<%= p.nama_produk %>" required></div>
+              <div class="mb-2"><label class="form-label small">Tipe</label><input type="text" name="tipe" class="form-control" value="<%= p.tipe %>"></div>
+              <div class="mb-2"><label class="form-label small">Garansi (Bulan)</label><input type="number" name="garansi_bulan" class="form-control" value="<%= p.garansi_bulan %>"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+              <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <% }) %>
+  </main>
+</div>
+<%- include('../partials/footer') %>

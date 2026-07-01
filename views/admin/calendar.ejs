@@ -1,0 +1,194 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-calendar3 me-2"></i>Kalender Jadwal</h4>
+      <div>
+        <a href="/admin/calendar?year=<%= month-1 < 1 ? year-1 : year %>&month=<%= month-1 < 1 ? 12 : month-1 %>" class="btn btn-sm btn-outline-secondary me-1">&larr; Sebelumnya</a>
+        <span class="fw-semibold mx-2">
+          <% var bulanNama = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'] %>
+          <%= bulanNama[month] %> <%= year %>
+        </span>
+        <a href="/admin/calendar?year=<%= month+1 > 12 ? year+1 : year %>&month=<%= month+1 > 12 ? 1 : month+1 %>" class="btn btn-sm btn-outline-secondary ms-1">Berikutnya &rarr;</a>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-2">
+            <table class="table table-bordered mb-0 calendar-table">
+              <thead>
+                <tr class="text-center">
+                  <th class="text-muted small fw-normal">Min</th>
+                  <th class="text-muted small fw-normal">Sen</th>
+                  <th class="text-muted small fw-normal">Sel</th>
+                  <th class="text-muted small fw-normal">Rab</th>
+                  <th class="text-muted small fw-normal">Kam</th>
+                  <th class="text-muted small fw-normal">Jum</th>
+                  <th class="text-muted small fw-normal">Sab</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% 
+                var firstDay = new Date(year, month-1, 1).getDay();
+                var daysInMonth = new Date(year, month, 0).getDate();
+                var scheduleMap = {};
+                schedulingData.forEach(function(s) {
+                  var d = s.tanggal;
+                  if (d && d.indexOf('-') > 0) {
+                    var parts = d.split('-');
+                    d = parts[2] + '/' + parts[1] + '/' + parts[0];
+                  }
+                  if (!scheduleMap[d]) scheduleMap[d] = [];
+                  scheduleMap[d].push(s);
+                });
+                var day = 1;
+                for (var row = 0; row < 6; row++) {
+                %>
+                <tr>
+                  <% for (var col = 0; col < 7; col++) { %>
+                  <% if ((row === 0 && col < firstDay) || day > daysInMonth) { %>
+                  <td class="calendar-empty"></td>
+                  <% } else { %>
+                  <% 
+                  var dateStr = String(day).padStart(2,'0') + '/' + String(month).padStart(2,'0') + '/' + year;
+                  var dayEvents = scheduleMap[dateStr] || [];
+                  var today = new Date();
+                  var isToday = (day === today.getDate() && month === (today.getMonth()+1) && year === today.getFullYear());
+                  %>
+                  <td class="calendar-day <%= isToday ? 'today' : '' %>" data-date="<%= dateStr %>">
+                    <div class="day-number"><%= day %></div>
+                    <% if (dayEvents.length > 0) { %>
+                    <div class="day-events">
+                      <% dayEvents.forEach(function(ev) { %>
+                      <div class="event-chip <%= ev.status === 'completed' ? 'bg-success' : 'bg-primary' %>" 
+                           title="<%= ev.ticket_no %> - <%= ev.teknisi_name %>"
+                           onclick="showDayDetail('<%= dateStr %>')">
+                        <small><%= ev.jam %> <%= ev.teknisi_name ? ev.teknisi_name.substring(0,6) : '' %></small>
+                      </div>
+                      <% }) %>
+                    </div>
+                    <% } %>
+                  </td>
+                  <% day++; %>
+                  <% } %>
+                  <% } %>
+                </tr>
+                <% if (day > daysInMonth) break; } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0"><i class="bi bi-list"></i> Detail Tanggal</h6>
+            <button class="btn btn-sm btn-outline-primary" onclick="showAddForm()" id="addBtn" style="display:none;"><i class="bi bi-plus"></i> Jadwalkan</button>
+          </div>
+          <div class="card-body p-2" id="dayDetail">
+            <div class="text-center text-secondary py-3 small">Klik tanggal untuk melihat detail</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+var csrfToken = '<%= csrf %>';
+var allEvents = <%- JSON.stringify(schedulingData) %>;
+var tickets = <%- JSON.stringify(tickets) %>;
+var tecknisiList = <%- JSON.stringify(teknisi) %>;
+var selectedDate = '';
+
+function showDayDetail(dateStr) {
+  selectedDate = dateStr;
+  var events = allEvents.filter(function(e) {
+    var d = e.tanggal;
+    if (d && d.indexOf('-') > 0) {
+      var parts = d.split('-');
+      d = parts[2] + '/' + parts[1] + '/' + parts[0];
+    }
+    return d === dateStr;
+  });
+  var html = '<div class="fw-semibold mb-2 border-bottom pb-1">' + dateStr + '</div>';
+  if (events.length === 0) {
+    html += '<div class="small text-secondary mb-2">Tidak ada jadwal</div>';
+  } else {
+    events.forEach(function(ev) {
+      var tekName = ev.teknisi_name || 'Unknown';
+      html += '<div class="mb-2 p-2 bg-light rounded small">';
+      html += '<div class="d-flex justify-content-between align-items-start">';
+      html += '<div class="fw-semibold"><a href="/admin/tickets/' + ev.ticket_id + '" class="text-decoration-none">' + ev.ticket_no + '</a></div>';
+      html += '<div class="d-flex gap-1">';
+      html += '<button class="btn btn-xs btn-outline-primary py-0 px-1" style="font-size:11px;" onclick="editSchedule(' + ev.ticket_id + ',\'' + ev.tanggal + '\',\'' + ev.jam + '\',\'' + (ev.teknisi_id || '') + '\',\'' + (ev.notes ? ev.notes.replace(/'/g,"\\'") : '') + '\')"><i class="bi bi-pencil"></i></button>';
+      html += '<form method="POST" action="/admin/tickets/' + ev.ticket_id + '/cancel-schedule" class="d-inline" onsubmit="return confirm(\'Batalkan jadwal ini?\')">';
+      html += '<input type="hidden" name="_csrf" value="' + csrfToken + '">';
+      html += '<button type="submit" class="btn btn-xs btn-outline-danger py-0 px-1" style="font-size:11px;"><i class="bi bi-x-circle"></i></button>';
+      html += '</form>';
+      html += '</div></div>';
+      html += '<div>' + ev.customer_name + ' (' + ev.customer_kota + ')</div>';
+      html += '<div class="text-primary">' + ev.jam + ' - ' + tekName + '</div>';
+      if (ev.notes) html += '<div class="text-secondary">' + ev.notes + '</div>';
+      html += '</div>';
+    });
+  }
+  html += '<hr><div class="small fw-semibold mb-1">Tambah Jadwal Baru</div>';
+  html += '<form method="POST" action="/admin/calendar/schedule" class="row g-1">';
+  html += '<input type="hidden" name="_csrf" value="' + csrfToken + '">';
+  html += '<input type="hidden" name="tanggal" value="' + dateStr + '">';
+  html += '<div class="col-12"><select name="ticket_id" class="form-select form-select-sm" required><option value="">-- Pilih Ticket --</option>';
+  var unschd = tickets.filter(function(t) { return !t.schedule_id; });
+  unschd.forEach(function(t) {
+    html += '<option value="' + t.id + '">' + t.ticket_no + ' - ' + t.customer_name + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="col-6"><select name="teknisi_id" class="form-select form-select-sm" required><option value="">Teknisi</option>';
+  tecknisiList.forEach(function(t) {
+    html += '<option value="' + t.id + '">' + t.name + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="col-3"><input type="time" name="jam" class="form-control form-control-sm" required></div>';
+  html += '<div class="col-3"><button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-plus"></i></button></div>';
+  html += '</form>';
+  document.getElementById('dayDetail').innerHTML = html;
+  document.getElementById('addBtn').style.display = 'inline-block';
+}
+
+function editSchedule(ticketId, tanggal, jam, teknisiId, notes) {
+  var newJam = prompt('Jam baru (HH:MM):', jam);
+  if (!newJam) return;
+  var newTeknisi = prompt('ID Teknisi baru:', teknisiId);
+  if (!newTeknisi) return;
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/admin/tickets/' + ticketId + '/schedule';
+  var fields = { _csrf: csrfToken, teknisi_id: newTeknisi, tanggal: tanggal, jam: newJam, notes: notes };
+  for (var k in fields) {
+    var inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = k;
+    inp.value = fields[k];
+    form.appendChild(inp);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function showAddForm() {
+  if (selectedDate) showDayDetail(selectedDate);
+  document.getElementById('dayDetail').querySelector('form input[name="jam"]').focus();
+}
+
+document.querySelectorAll('.calendar-day').forEach(function(td) {
+  td.addEventListener('click', function() {
+    var date = this.getAttribute('data-date');
+    if (date) showDayDetail(date);
+  });
+});
+</script>
+<%- include('../partials/footer') %>

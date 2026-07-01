@@ -1,0 +1,90 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-speedometer2 me-2"></i>Dashboard Management</h4>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm stat-card">
+          <div class="card-body text-center p-3">
+            <div class="stat-icon bg-warning text-white mb-2"><i class="bi bi-clock"></i></div>
+            <div class="stat-value"><%= stats.waiting %></div>
+            <div class="stat-label">Menunggu Approval</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm stat-card">
+          <div class="card-body text-center p-3">
+            <div class="stat-icon bg-success text-white mb-2"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-value"><%= stats.completed_this_month %></div>
+            <div class="stat-label">Selesai Bulan Ini</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm stat-card">
+          <div class="card-body text-center p-3">
+            <div class="stat-icon bg-primary text-white mb-2"><i class="bi bi-ticket"></i></div>
+            <div class="stat-value"><%= stats.total %></div>
+            <div class="stat-label">Total Ticket</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold">
+            <i class="bi bi-hourglass-split me-1"></i>Menunggu Approval
+            <a href="/management/approval" class="btn btn-sm btn-warning float-end">Lihat Semua</a>
+          </div>
+          <div class="card-body p-0">
+            <% pendingApproval.forEach(function(t) { %>
+            <div class="border-bottom p-3">
+              <div class="d-flex justify-content-between">
+                <strong><%= t.ticket_no %></strong>
+                <span class="badge bg-warning text-dark">Approval</span>
+              </div>
+              <p class="mb-1 small"><strong><%= t.customer_name %></strong> - <%= t.nama_produk %></p>
+              <p class="mb-1 small text-secondary">Keluhan: <%= t.keluhan %></p>
+              <% if (t.admin_analysis) { %><p class="mb-1 small text-primary">Analisa: <%= t.admin_analysis %></p><% } %>
+              <a href="/management/approval" class="btn btn-sm btn-outline-primary mt-1">Proses</a>
+            </div>
+            <% }) %>
+            <% if (pendingApproval.length === 0) { %>
+            <div class="p-3 text-center text-secondary">Tidak ada ticket menunggu approval</div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold"><i class="bi bi-graph-up me-1"></i>Ticket per Bulan (Tahun Ini)</div>
+          <div class="card-body">
+            <canvas id="monthlyChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+var ctx = document.getElementById('monthlyChart');
+if (ctx) {
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: <%- chartLabels %>,
+      datasets: [
+        { label: 'Total', data: <%- chartTotals %>, backgroundColor: 'rgba(13,110,253,0.5)' },
+        { label: 'Selesai', data: <%- chartCompleted %>, backgroundColor: 'rgba(25,135,84,0.5)' }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+</script>
+<%- include('../partials/footer') %>

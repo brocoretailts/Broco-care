@@ -1,0 +1,166 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-gear me-2"></i>Pengaturan</h4>
+
+    <% if (query.success === 'password_changed') { %><div class="alert alert-success">Password berhasil diubah!</div><% } %>
+    <% if (query.success === 'profile_updated') { %><div class="alert alert-success">Profil berhasil diperbarui!</div><% } %>
+    <% if (query.success === 'user_updated') { %><div class="alert alert-success">User berhasil diperbarui!</div><% } %>
+    <% if (query.success === 'user_created') { %><div class="alert alert-success">User baru berhasil ditambahkan!</div><% } %>
+    <% if (query.error === 'wrong_password') { %><div class="alert alert-danger">Password saat ini salah!</div><% } %>
+    <% if (query.error === 'password_mismatch') { %><div class="alert alert-danger">Password baru tidak cocok!</div><% } %>
+    <% if (query.error && query.error.startsWith('Username')) { %><div class="alert alert-danger"><%= query.error %></div><% } %>
+    <% if (query.error === 'password_short') { %><div class="alert alert-danger">Password minimal 4 karakter!</div><% } %>
+
+    <ul class="nav nav-tabs mb-3" id="settingsTabs">
+      <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabProfile">Profil Saya</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabPassword">Ubah Password</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabUsers">Kelola User</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabBackup">Backup Data</a></li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="tabProfile">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <form method="POST" action="/admin/settings/profile">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="row g-3">
+                <div class="col-md-6"><label class="form-label small">Nama Lengkap</label><input name="name" class="form-control" value="<%= user.name %>" required></div>
+                <div class="col-md-6"><label class="form-label small">Username</label><input class="form-control" value="<%= user.username %>" disabled></div>
+                <div class="col-md-6"><label class="form-label small">No. HP (untuk WA)</label><input name="phone" class="form-control" value="<%= user.phone || '' %>" placeholder="08123456789"></div>
+                <div class="col-md-6"><label class="form-label small">Email</label><input name="email" type="email" class="form-control" value="<%= user.email || '' %>"></div>
+              </div>
+              <button type="submit" class="btn btn-primary mt-3">Simpan Profil</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="tabPassword">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <form method="POST" action="/admin/settings/password">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="row g-3">
+                <div class="col-md-4"><label class="form-label small">Password Saat Ini</label><input type="password" name="current_password" class="form-control" required></div>
+                <div class="col-md-4"><label class="form-label small">Password Baru</label><input type="password" name="new_password" class="form-control" required></div>
+                <div class="col-md-4"><label class="form-label small">Konfirmasi Password Baru</label><input type="password" name="confirm_password" class="form-control" required></div>
+              </div>
+              <button type="submit" class="btn btn-warning mt-3">Ubah Password</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="tabUsers">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span></span>
+          <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="bi bi-plus"></i> Tambah User</button>
+        </div>
+        <div class="card border-0 shadow-sm">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr><th>Username</th><th>Nama</th><th>Role</th><th>No. HP</th><th>Email</th><th></th></tr>
+              </thead>
+              <tbody>
+                <% admins.forEach(function(a) { %>
+                <tr>
+                  <td class="fw-semibold"><%= a.username %></td>
+                  <td><%= a.name %></td>
+                  <td><span class="badge bg-<%= a.role === 'admin' ? 'primary' : 'warning' %>"><%= a.role.charAt(0).toUpperCase() + a.role.slice(1) %></span></td>
+                  <td><%= a.phone || '-' %></td>
+                  <td><%= a.email || '-' %></td>
+                  <td><button class="btn btn-sm btn-outline-primary" onclick="editUser(<%= a.id %>, '<%= a.name.replace(/'/g,"\\'") %>', '<%= a.username %>', '<%= (a.phone||'').replace(/'/g,"\\'") %>', '<%= (a.email||'').replace(/'/g,"\\'") %>')" data-bs-toggle="modal" data-bs-target="#editUserModal"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="tabBackup">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white fw-semibold">Informasi Database</div>
+              <div class="card-body">
+                <table class="table table-sm">
+                  <tr><td>Lokasi File</td><td class="font-monospace small"><%= dbPath %></td></tr>
+                  <tr><td>Ukuran File</td><td><%= (dbSize / 1024).toFixed(1) %> KB</td></tr>
+                  <tr><td>Ukuran Uploads</td><td><%= (uploadsSize / 1024 / 1024).toFixed(1) %> MB</td></tr>
+                  <tr><td>Folder Uploads</td><td class="font-monospace small"><%= uploadsDir %></td></tr>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white fw-semibold">Download Backup</div>
+              <div class="card-body text-center py-4">
+                <i class="bi bi-database" style="font-size: 3rem;"></i>
+                <p class="mt-2">Download file database <strong>database.sqlite</strong></p>
+                <p class="small text-secondary">File ini berisi semua data: users, tickets, products, schedules, dan lainnya.</p>
+                <a href="/admin/backup/download" class="btn btn-primary"><i class="bi bi-download"></i> Download Backup</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal fade" id="addUserModal">
+  <div class="modal-dialog">
+    <form method="POST" action="/admin/settings/user/create" class="modal-content">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="modal-header"><h5 class="modal-title">Tambah User Baru</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">Nama Lengkap</label><input name="name" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Username</label><input name="username" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Password</label><input name="password" type="password" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Role</label>
+          <select name="role" class="form-select">
+            <option value="admin">Admin</option>
+            <option value="management">Management</option>
+          </select>
+        </div>
+        <div class="mb-2"><label class="form-label small">No. HP (untuk WA)</label><input name="phone" class="form-control" placeholder="08123456789"></div>
+        <div class="mb-2"><label class="form-label small">Email</label><input name="email" type="email" class="form-control"></div>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">Simpan</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="editUserModal">
+  <div class="modal-dialog">
+    <form method="POST" class="modal-content" id="editUserForm">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="modal-header"><h5 class="modal-title">Edit User</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">Nama Lengkap</label><input name="name" id="editName" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">Username</label><input name="username" id="editUsername" class="form-control" required></div>
+        <div class="mb-2"><label class="form-label small">No. HP</label><input name="phone" id="editPhone" class="form-control"></div>
+        <div class="mb-2"><label class="form-label small">Email</label><input name="email" id="editEmail" type="email" class="form-control"></div>
+        <div class="mb-2"><label class="form-label small">Password Baru (kosongkan jika tidak diubah)</label><input name="password" type="password" class="form-control"></div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary">Simpan</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+function editUser(id, name, username, phone, email) {
+  document.getElementById('editUserForm').action = '/admin/settings/user/' + id;
+  document.getElementById('editName').value = name;
+  document.getElementById('editUsername').value = username;
+  document.getElementById('editPhone').value = phone;
+  document.getElementById('editEmail').value = email;
+}
+</script>
+<%- include('../partials/footer') %>

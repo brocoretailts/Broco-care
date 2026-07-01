@@ -1,0 +1,10 @@
+node_modules/
+database.sqlite
+*.sqlite-shm
+*.sqlite-wal
+uploads/*
+!uploads/.gitkeep
+public/uploads/*
+.wwebjs_auth/
+.wwebjs_cache/
+.env

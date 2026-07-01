@@ -1,0 +1,118 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-4"><i class="bi bi-bar-chart me-2"></i>Laporan & Grafik</h4>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="text-secondary small">Rata-rata Penyelesaian</div>
+          <div style="font-size: 2.5rem; font-weight: 700; color: var(--bs-primary);"><%= avgResolution %> <small style="font-size: 0.9rem;">Hari</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-white fw-semibold">Complaint per Produk</div>
+          <div class="card-body">
+            <canvas id="productChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-white fw-semibold">Complaint per Marketplace</div>
+          <div class="card-body">
+            <canvas id="marketplaceChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold">Complaint Terbanyak</div>
+          <div class="card-body">
+            <table class="table table-sm">
+              <thead><tr><th>Keluhan</th><th class="text-end">Total</th></tr></thead>
+              <tbody>
+                <% topIssues.forEach(function(issue) { %>
+                <tr><td><%= issue.keluhan %></td><td class="text-end"><%= issue.total %></td></tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold">Teknisi Tercepat</div>
+          <div class="card-body">
+            <table class="table table-sm">
+              <thead><tr><th>Teknisi</th><th class="text-end">Complaint Ditangani</th></tr></thead>
+              <tbody>
+                <% topTeknisi.forEach(function(tek) { %>
+                <tr>
+                  <td><%= tek.name %></td>
+                  <td class="text-end"><%= tek.total_visit %></td>
+                </tr>
+                <% }) %>
+                <% if (topTeknisi.length === 0) { %><tr><td colspan="2" class="text-center text-secondary">Belum ada data</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold">Produk Paling Banyak Bermasalah</div>
+          <div class="card-body">
+            <table class="table table-sm">
+              <thead><tr><th>Rank</th><th>Produk</th><th>Tipe</th><th class="text-end">Total Complaint</th></tr></thead>
+              <tbody>
+                <% topProblemProducts.forEach(function(p, i) { %>
+                <tr>
+                  <td class="fw-bold"><%= i + 1 %></td>
+                  <td><%= p.nama_produk %></td>
+                  <td><%= p.tipe %></td>
+                  <td class="text-end"><span class="badge bg-danger"><%= p.total %></span></td>
+                </tr>
+                <% }) %>
+                <% if (topProblemProducts.length === 0) { %><tr><td colspan="4" class="text-center text-secondary">Belum ada data</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+var colors = ['#0d6efd','#6610f2','#6f42c1','#d63384','#dc3545','#fd7e14','#ffc107','#198754','#20c997','#0dcaf0'];
+
+var labels1 = <%- chartProductLabels %>;
+var data1 = <%- chartProductData %>;
+if (labels1.length > 0) {
+  new Chart(document.getElementById('productChart'), {
+    type: 'doughnut',
+    data: { labels: labels1, datasets: [{ data: data1, backgroundColor: colors.slice(0, labels1.length) }] }
+  });
+}
+
+var labels2 = <%- chartMarketplaceLabels %>;
+var data2 = <%- chartMarketplaceData %>;
+if (labels2.length > 0) {
+  new Chart(document.getElementById('marketplaceChart'), {
+    type: 'pie',
+    data: { labels: labels2, datasets: [{ data: data2, backgroundColor: colors.slice(0, labels2.length) }] }
+  });
+}
+</script>
+<%- include('../partials/footer') %>
