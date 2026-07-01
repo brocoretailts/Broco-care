@@ -101,22 +101,22 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 async function getManagementPhones() {
-  const users = await await queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
+  const users = await queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
   return users.map(u => u.phone).filter(Boolean);
 }
 
 async function getAdminPhones() {
-  const users = await await queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
+  const users = await queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
   return users.map(u => u.phone).filter(Boolean);
 }
 
 async function getAdminIds() {
-  const users = await await queryAll("SELECT id FROM users WHERE role = 'admin'");
+  const users = await queryAll("SELECT id FROM users WHERE role = 'admin'");
   return users.map(u => u.id);
 }
 
 async function getTeknisiPhone(teknisiId) {
-  const u = await await queryOne("SELECT phone FROM users WHERE id = ?", [teknisiId]);
+  const u = await queryOne("SELECT phone FROM users WHERE id = ?", [teknisiId]);
   return u ? u.phone : null;
 }
 
@@ -200,7 +200,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
 
 async function getNotifCount(user) {
   if (!user) return 0;
-  const r = await await queryOne(
+  const r = await queryOne(
     "SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
     [user.id, user.role]
   );
@@ -209,7 +209,7 @@ async function getNotifCount(user) {
 
 async function getNotifs(user) {
   if (!user) return [];
-  return await await queryAll(
+  return await queryAll(
     "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) ORDER BY created_at DESC LIMIT 10",
     [user.id, user.role]
   );
@@ -217,7 +217,7 @@ async function getNotifs(user) {
 
 async function generateTicketNo() {
   const year = new Date().getFullYear();
-  const last = await await queryOne(
+  const last = await queryOne(
     "SELECT ticket_no FROM tickets WHERE ticket_no LIKE ? ORDER BY id DESC LIMIT 1",
     [`SC-${year}-%`]
   );
@@ -264,12 +264,12 @@ function wrap(fn) {
 app.get('/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
   const today = todayStr();
   const stats = {
-    complaint_hari_ini: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE tanggal_complaint = ?", [today]).c,
-    waiting_approval: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
-    waiting_schedule: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'scheduled'").c,
-    on_progress: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'on_progress'").c,
-    completed: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed'").c,
-    rejected: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'rejected'").c,
+    complaint_hari_ini: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE tanggal_complaint = ?", [today])).c,
+    waiting_approval: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'")).c,
+    waiting_schedule: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'scheduled'")).c,
+    on_progress: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'on_progress'")).c,
+    completed: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed'")).c,
+    rejected: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'rejected'")).c,
   };
 
   const topProducts = await queryAll(`
@@ -956,9 +956,9 @@ app.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {
 app.get('/management/dashboard', isAuthenticated, isManagement, async (req, res) => {
   try {
     const stats = {
-      waiting: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'").c,
-      completed_this_month: await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)").c,
-      total: await queryOne("SELECT COUNT(*) as c FROM tickets").c,
+      waiting: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'")).c,
+      completed_this_month: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)")).c,
+      total: (await queryOne("SELECT COUNT(*) as c FROM tickets")).c,
     };
 
     const pendingApproval = await queryAll(`
@@ -1129,8 +1129,8 @@ app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, async (req, res) => {
 
   const stats = {
     today: todaySchedule.length,
-    completed: await queryOne("SELECT COUNT(*) as c FROM visit_results v JOIN schedules s ON v.ticket_id = s.ticket_id WHERE s.teknisi_id = ?", [req.session.user.id]).c,
-    total: await queryOne("SELECT COUNT(*) as c FROM schedules WHERE teknisi_id = ?", [req.session.user.id]).c
+    completed: (await queryOne("SELECT COUNT(*) as c FROM visit_results v JOIN schedules s ON v.ticket_id = s.ticket_id WHERE s.teknisi_id = ?", [req.session.user.id])).c,
+    total: (await queryOne("SELECT COUNT(*) as c FROM schedules WHERE teknisi_id = ?", [req.session.user.id])).c
   };
 
   res.render('teknisi/dashboard', {

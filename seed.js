@@ -95,7 +95,7 @@ async function seed() {
     );
   }
 
-  const ticketsForSchedule = queryAll("SELECT id, ticket_no FROM tickets WHERE status IN ('scheduled','on_progress','completed')");
+  const ticketsForSchedule = await queryAll("SELECT id, ticket_no FROM tickets WHERE status IN ('scheduled','on_progress','completed')");
   for (const tk of ticketsForSchedule) {
     await run(
       "INSERT INTO schedules (ticket_id, teknisi_id, tanggal, jam, created_by) VALUES (?, ?, ?, ?, 1)",
@@ -103,7 +103,7 @@ async function seed() {
     );
   }
 
-  const completedTickets = queryAll("SELECT id, ticket_no FROM tickets WHERE status = 'completed'");
+  const completedTickets = await queryAll("SELECT id, ticket_no FROM tickets WHERE status = 'completed'");
   const solusiOptions = ['Servis', 'Ganti Sparepart', 'Ganti Unit'];
   for (const tk of completedTickets) {
     const solusi = solusiOptions[Math.floor(Math.random() * solusiOptions.length)];
