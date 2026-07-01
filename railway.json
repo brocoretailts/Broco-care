@@ -9,5 +9,8 @@
     "healthcheckPath": "/login",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE"
+  },
+  "variables": {
+    "NIXPACKS_NODE_VERSION": "20"
   }
 }
