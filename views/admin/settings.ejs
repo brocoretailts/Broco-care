@@ -18,6 +18,7 @@
     <% if (query.error === 'invalid_file') { %><div class="alert alert-danger">File harus berekstensi .sqlite!</div><% } %>
     <% if (query.error && query.error.startsWith('invalid_database')) { %><div class="alert alert-danger">File database tidak valid! <%= query.error.replace('invalid_database: ', '') %></div><% } %>
     <% if (query.error === 'restore_failed') { %><div class="alert alert-danger">Gagal merestore database. Coba lagi.</div><% } %>
+    <% if (query.error === 'invalid_backup') { %><div class="alert alert-danger">File backup tidak valid! Pastikan file .zip berisi database.sqlite.</div><% } %>
     <% if (query.error && query.error.startsWith('upload_error')) { %><div class="alert alert-danger">Gagal upload: <%= query.error.replace('upload_error: ', '') %></div><% } %>
 
     <ul class="nav nav-tabs mb-3" id="settingsTabs">
@@ -103,23 +104,26 @@
                 </table>
               </div>
             </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card border-0 shadow-sm">
-              <div class="card-header bg-white fw-semibold">Download Backup</div>
-              <div class="card-body text-center py-4">
-                <i class="bi bi-database" style="font-size: 3rem;"></i>
-                <p class="mt-2">Download file database <strong>database.sqlite</strong></p>
-                <p class="small text-secondary">File ini berisi semua data: users, tickets, products, schedules, dan lainnya.</p>
-                <a href="/admin/backup/download" class="btn btn-primary"><i class="bi bi-download"></i> Download Backup</a>
+            <div class="card border-0 shadow-sm mt-3">
+              <div class="card-header bg-white fw-semibold">Backup Database (.sqlite)</div>
+              <div class="card-body text-center py-3">
+                <p class="small text-secondary">Hanya data database (tanpa file upload)</p>
+                <a href="/admin/backup/download" class="btn btn-primary btn-sm"><i class="bi bi-download"></i> Download .sqlite</a>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm mt-3">
+              <div class="card-header bg-white fw-semibold">Backup Lengkap (.zip)</div>
+              <div class="card-body text-center py-3">
+                <p class="small text-secondary">Database + semua file upload (foto, video, dll)</p>
+                <a href="/admin/backup/download-full" class="btn btn-success btn-sm"><i class="bi bi-download"></i> Download Full Backup (.zip)</a>
               </div>
             </div>
           </div>
-          <div class="col-md-12 mt-3">
+          <div class="col-md-6">
             <div class="card border-0 shadow-sm">
-              <div class="card-header bg-white fw-semibold">Restore Backup</div>
+              <div class="card-header bg-white fw-semibold">Restore Database (.sqlite)</div>
               <div class="card-body">
-                <p class="small text-secondary">Upload file <strong>.sqlite</strong> backup untuk mengembalikan database.</p>
+                <p class="small text-secondary">Upload file <strong>.sqlite</strong> — hanya data database.</p>
                 <form method="POST" action="/admin/settings/restore" enctype="multipart/form-data">
                   <input type="hidden" name="_csrf" value="<%= csrf %>">
                   <div class="row g-2 align-items-end">
@@ -127,7 +131,24 @@
                       <input type="file" name="database" class="form-control" accept=".sqlite" required>
                     </div>
                     <div class="col-md-4">
-                      <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Yakin ingin restore? Data saat ini akan diganti!')"><i class="bi bi-upload"></i> Restore Database</button>
+                      <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Yakin ingin restore? Data saat ini akan diganti!')"><i class="bi bi-upload"></i> Restore</button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+            <div class="card border-0 shadow-sm mt-3">
+              <div class="card-header bg-white fw-semibold">Restore Lengkap (.zip)</div>
+              <div class="card-body">
+                <p class="small text-secondary">Upload file <strong>.zip</strong> — database + file upload kembali semua.</p>
+                <form method="POST" action="/admin/settings/restore-full" enctype="multipart/form-data">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                      <input type="file" name="backup" class="form-control" accept=".zip" required>
+                    </div>
+                    <div class="col-md-4">
+                      <button type="submit" class="btn btn-success w-100" onclick="return confirm('Yakin ingin restore lengkap? Semua data + uploads akan diganti!')"><i class="bi bi-upload"></i> Restore Full</button>
                     </div>
                   </div>
                 </form>

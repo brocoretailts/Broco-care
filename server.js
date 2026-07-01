@@ -723,6 +723,23 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, (req, res) => {
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
 });
 
+var archiver = require('archiver');
+app.get('/admin/backup/download-full', isAuthenticated, isAdmin, function(req, res) {
+  run("PRAGMA wal_checkpoint(TRUNCATE)");
+  var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="broco-full-backup-' + dateStr + '.zip"');
+  var archive = archiver('zip', { zlib: { level: 6 } });
+  archive.on('error', function(err) { throw err; });
+  archive.pipe(res);
+  archive.file(path.join(__dirname, 'database.sqlite'), { name: 'database.sqlite' });
+  var uploadsDir = path.join(__dirname, 'public', 'uploads');
+  if (fs.existsSync(uploadsDir)) {
+    archive.directory(uploadsDir, 'uploads');
+  }
+  archive.finalize();
+});
+
 var tempDir = path.join(__dirname, 'temp');
 try { if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true }); } catch(e) {}
 const restoreUpload = multer({ dest: tempDir, limits: { fileSize: 100 * 1024 * 1024 } });
@@ -786,6 +803,89 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
       res.redirect('/admin/settings?error=restore_failed');
     }
   } catch (e) {
+    try { if (uploadedFile) fs.unlinkSync(uploadedFile); } catch(e2) {}
+    res.redirect('/admin/settings?error=restore_failed');
+  }
+});
+
+var extractZip = require('extract-zip');
+app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req, res, next) {
+  restoreUpload.single('backup')(req, res, function(err) {
+    if (err) return res.redirect('/admin/settings?error=' + encodeURIComponent('upload_error: ' + err.message));
+    next();
+  });
+}, async function(req, res) {
+  var uploadedFile = null;
+  try {
+    if (!req.file) return res.redirect('/admin/settings?error=file_required');
+    uploadedFile = req.file.path;
+    if (!req.file.originalname.endsWith('.zip')) {
+      try { fs.unlinkSync(uploadedFile); } catch(e) {}
+      return res.redirect('/admin/settings?error=invalid_file');
+    }
+    var extractDir = path.join(__dirname, 'temp', 'restore_' + Date.now());
+    try { fs.mkdirSync(extractDir, { recursive: true }); } catch(e) {}
+    await extractZip(uploadedFile, { dir: extractDir });
+    var extractedDb = path.join(extractDir, 'database.sqlite');
+    if (!fs.existsSync(extractedDb)) {
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch(e) {}
+      try { fs.unlinkSync(uploadedFile); } catch(e) {}
+      return res.redirect('/admin/settings?error=invalid_backup');
+    }
+    var testDb;
+    try {
+      testDb = new Database(extractedDb);
+      testDb.pragma('wal_checkpoint(TRUNCATE)');
+      testDb.prepare("SELECT COUNT(*) FROM users").get();
+      testDb.close();
+    } catch (e) {
+      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch(e2) {}
+      try { fs.unlinkSync(uploadedFile); } catch(e2) {}
+      return res.redirect('/admin/settings?error=' + encodeURIComponent('invalid_database: ' + e.message));
+    }
+    var dbPath = path.join(__dirname, 'database.sqlite');
+    var backupPath = dbPath + '.backup';
+    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
+    closeDB();
+    try { if (fs.existsSync(dbPath + '-wal')) fs.unlinkSync(dbPath + '-wal'); } catch(e) {}
+    try { if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm'); } catch(e) {}
+    var hasDb = fs.existsSync(dbPath);
+    if (hasDb) fs.renameSync(dbPath, backupPath);
+    fs.copyFileSync(extractedDb, dbPath);
+    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
+    var extractedUploads = path.join(extractDir, 'uploads');
+    var uploadsDir = path.join(__dirname, 'public', 'uploads');
+    if (fs.existsSync(extractedUploads)) {
+      if (fs.existsSync(uploadsDir)) {
+        try { fs.rmSync(uploadsDir, { recursive: true, force: true }); } catch(e) {}
+      }
+      try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch(e) {}
+      var files = fs.readdirSync(extractedUploads);
+      files.forEach(function(f) {
+        try { fs.copyFileSync(path.join(extractedUploads, f), path.join(uploadsDir, f)); } catch(e) {}
+      });
+    }
+    try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch(e) {}
+    try { fs.unlinkSync(uploadedFile); } catch(e) {}
+    uploadedFile = null;
+    try {
+      initDB();
+      queryAll("SELECT COUNT(*) FROM users");
+      try {
+        if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch(e) {}
+      res.redirect('/admin/settings?success=restored');
+    } catch (e) {
+      closeDB();
+      if (hasDb && fs.existsSync(backupPath)) {
+        try { fs.unlinkSync(dbPath); } catch(e2) {}
+        fs.renameSync(backupPath, dbPath);
+      }
+      initDB();
+      res.redirect('/admin/settings?error=restore_failed');
+    }
+  } catch (e) {
+    console.error('Full restore error:', e.message);
     try { if (uploadedFile) fs.unlinkSync(uploadedFile); } catch(e2) {}
     res.redirect('/admin/settings?error=restore_failed');
   }
