@@ -760,7 +760,7 @@ app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(
     }
     await new Promise(function(resolve, reject) {
       var output = fs.createWriteStream(zipPath);
-      var archive = archiver('zip', { zlib: { level: 6 } });
+      var archive = new archiver.ZipArchive({ zlib: { level: 6 } });
       output.on('close', resolve);
       archive.on('error', function(err) { reject(err); });
       archive.pipe(output);
