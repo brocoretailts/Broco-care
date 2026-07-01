@@ -739,7 +739,8 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, restoreUpload.sing
       testDb.close();
     } catch (e) {
       try { fs.unlinkSync(uploadedFile); } catch(e2) {}
-      return res.redirect('/admin/settings?error=invalid_database');
+      console.error('Restore validation error:', e.message);
+      return res.redirect('/admin/settings?error=' + encodeURIComponent('invalid_database: ' + e.message));
     }
     var dbPath = path.join(__dirname, 'database.sqlite');
     var backupPath = dbPath + '.backup';

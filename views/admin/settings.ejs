@@ -16,7 +16,7 @@
     <% if (query.error === 'password_short') { %><div class="alert alert-danger">Password minimal 4 karakter!</div><% } %>
     <% if (query.error === 'file_required') { %><div class="alert alert-danger">Pilih file database terlebih dahulu!</div><% } %>
     <% if (query.error === 'invalid_file') { %><div class="alert alert-danger">File harus berekstensi .sqlite!</div><% } %>
-    <% if (query.error === 'invalid_database') { %><div class="alert alert-danger">File database tidak valid! Restore dibatalkan.</div><% } %>
+    <% if (query.error && query.error.startsWith('invalid_database')) { %><div class="alert alert-danger">File database tidak valid! <%= query.error.replace('invalid_database: ', '') %></div><% } %>
     <% if (query.error === 'restore_failed') { %><div class="alert alert-danger">Gagal merestore database. Coba lagi.</div><% } %>
 
     <ul class="nav nav-tabs mb-3" id="settingsTabs">
