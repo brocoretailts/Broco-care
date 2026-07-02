@@ -470,10 +470,19 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
-    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
-    if (ticket) {
-      var phones = await getManagementPhones();
-      if (phones.length) await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
+    var ticket = curTicket;
+    var phones = await getManagementPhones();
+    console.log('Followup WA: phones=', JSON.stringify(phones));
+    if (phones.length) {
+      for (var i = 0; i < phones.length; i++) {
+        try {
+          var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticket.ticket_no + '\nCustomer: ' + ticket.customer_name + '\n\nAda follow-up ticket yang membutuhkan approval Anda.' + wa.appLink('/management/approval');
+          var ok = await wa.sendWithRetry(phones[i], msg);
+          console.log('Followup WA to', phones[i], ok ? 'OK' : 'FAILED');
+        } catch (e2) {
+          console.error('Followup WA error for', phones[i], ':', e2.message);
+        }
+      }
     }
     res.redirect(`/admin/tickets/${req.params.id}`);
   } catch (e) {

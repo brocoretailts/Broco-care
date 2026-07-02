@@ -328,6 +328,7 @@ module.exports = {
   sendScheduleNotification: sendScheduleNotification,
   sendScheduleCancelledNotification: sendScheduleCancelledNotification,
   sendToMany: sendToMany,
+  appLink: appLink,
   getStatus: getStatus,
   normalizePhone: normalizePhone,
   getQRBase64: getQRBase64,
