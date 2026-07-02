@@ -470,14 +470,11 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
-    var ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
     var waOk = 0;
-    if (ticket && wa.getStatus().connected) {
+    if (ticket) {
       var phones = await getManagementPhones();
-      for (var pi = 0; pi < phones.length; pi++) {
-        var sent = await wa.sendApprovalNotification(phones[pi], ticket.ticket_no, ticket.customer_name);
-        if (sent) waOk++;
-      }
+      if (phones.length) waOk = await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
     }
     res.redirect(`/admin/tickets/${req.params.id}` + (waOk === 0 ? '?wa_failed=1' : ''));
   } catch (e) {
@@ -1414,6 +1411,18 @@ app.post('/api/wa/resend', isAuthenticated, async (req, res) => {
 app.post('/api/wa/clear-failed', isAuthenticated, async (req, res) => {
   wa.clearFailedMessages();
   res.json({ ok: true });
+});
+
+app.post('/api/wa/test-send', isAuthenticated, isAdmin, async (req, res) => {
+  var phone = req.body.phone || '';
+  var ticketNo = req.body.ticket_no || 'TEST-001';
+  var customer = req.body.customer || 'Test Customer';
+  try {
+    var ok = await wa.sendApprovalNotification(phone, ticketNo, customer);
+    res.json({ ok: ok, phone: phone, ticketNo: ticketNo, customer: customer, message: ok ? 'WA terkirim' : 'WA gagal' });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 setInterval(async function() {
