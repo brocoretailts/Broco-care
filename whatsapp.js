@@ -9,6 +9,8 @@ let ready = false;
 let lastQr = null;
 let initPromise = null;
 let reconnectTimer = null;
+let initError = null;
+let initAttempts = 0;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000;
@@ -106,6 +108,8 @@ async function loadAuthFromTurso() {
 
 async function init() {
   if (initPromise) return initPromise;
+  initAttempts++;
+  initError = null;
   initPromise = (async function() {
     cleanup();
     if (sock) { try { sock.end(undefined); } catch(e) {} sock = null; }
@@ -113,7 +117,6 @@ async function init() {
     lastQr = null;
     try {
       await ensureAuthTable();
-      // Always wipe and reload from Turso to ensure clean state
       if (fs.existsSync(SESSION_DIR)) {
         var old = fs.readdirSync(SESSION_DIR);
         for (var f of old) fs.unlinkSync(path.join(SESSION_DIR, f));
@@ -131,6 +134,7 @@ async function init() {
       });
       sock.ev.on('error', function(err) {
         console.error('Baileys socket error (ignored):', err.message);
+        initError = 'Socket error: ' + err.message;
       });
       sock.ev.on('creds.update', function() {
         saveCreds();
@@ -140,25 +144,40 @@ async function init() {
         var { connection, lastDisconnect, qr } = update;
         if (qr) {
           lastQr = qr;
+          initError = null;
           console.log('Baileys QR received (scan with WhatsApp)');
         }
         if (connection === 'open') {
           ready = true;
           lastQr = null;
+          initError = null;
           console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
           saveAuthToTurso();
         }
         if (connection === 'close') {
           ready = false;
           var reason = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 'unknown';
-          console.log('WhatsApp disconnected (reason:', reason, '). Reconnecting in', RECONNECT_DELAY / 1000, 's...');
+          var errMsg = lastDisconnect && lastDisconnect.error ? lastDisconnect.error.message || lastDisconnect.error : '';
+          initError = 'Disconnected (reason: ' + reason + ') ' + errMsg;
+          console.log('WhatsApp disconnected (reason:', reason, ')', errMsg, '. Reconnecting in', RECONNECT_DELAY / 1000, 's...');
           initPromise = null;
           setTimeout(init, RECONNECT_DELAY);
         }
       });
+      // watchdog: if no connection.update after 60s, log warning
+      var watchdog = setTimeout(function() {
+        if (!ready && !lastQr) {
+          var warn = 'WA init watchdog: no connection event after 60s (attempt ' + initAttempts + ')';
+          console.warn(warn);
+          if (!initError) initError = warn;
+        }
+      }, 60000);
+      watchdog.unref();
       return true;
     } catch (e) {
-      console.error('Baileys init error:', e.message);
+      var msg = e.message || String(e);
+      console.error('Baileys init error:', msg);
+      initError = 'Init error: ' + msg;
       ready = false;
       console.log('WhatsApp init failed — retrying in', RECONNECT_DELAY / 1000, 's...');
       initPromise = null;
@@ -339,7 +358,7 @@ async function sendToMany(phones, fn) {
 }
 
 function getStatus() {
-  return { connected: ready };
+  return { connected: ready, qrAvailable: !!lastQr, initAttempts: initAttempts, error: initError };
 }
 
 module.exports = {
