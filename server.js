@@ -28,9 +28,10 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`);
   }
 });
-const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','application/pdf','video/mp4','video/webm','video/quicktime'];
+const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif','application/pdf','video/mp4','video/webm','video/quicktime'];
 function fileFilter(req, file, cb) {
   if (ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
+  console.log('Multer rejected file:', file.fieldname, file.originalname, file.mimetype);
   cb(null, false);
 }
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
