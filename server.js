@@ -439,6 +439,8 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
   res.render('admin/ticket-detail', {
     ticket, schedule, visit, logs, teknisi,
     wa_failed: req.query.wa_failed,
+    wa_ok: req.query.wa,
+    wa_phones: req.query.wp,
     error: req.query.error,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
@@ -472,13 +474,15 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
-    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+     const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
     var waOk = 0;
     if (ticket) {
       var phones = await getManagementPhones();
-      if (phones.length) waOk = await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
+      if (phones.length) {
+        waOk = await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
+      }
     }
-    res.redirect(`/admin/tickets/${req.params.id}` + (waOk === 0 ? '?wa_failed=1' : ''));
+    res.redirect(`/admin/tickets/${req.params.id}?wa=${waOk}&wp=${phones?phones.length:0}`);
   } catch (e) {
     console.error('Followup error:', e.stack || e.message);
     res.redirect(`/admin/tickets/${req.params.id}?error=followup_failed`);

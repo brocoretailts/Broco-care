@@ -11,6 +11,13 @@
     <% if (typeof error !== 'undefined' && error === 'followup_failed') { %>
       <div class="alert alert-danger py-2 mb-2">ERROR follow-up — ada masalah teknis. Cek server log.</div>
     <% } %>
+    <% if (typeof wa_ok !== 'undefined') { %>
+      <div class="alert alert-info py-1 mb-2 small">
+        DEBUG: wa=<%= wa_ok %> phones=<%= typeof wa_phones !== 'undefined' ? wa_phones : '?' %>
+        <% if (wa_ok === '0') { %><span class="fw-bold text-danger">WA gagal dikirim</span><% } %>
+        <% if (wa_ok > '0') { %><span class="fw-bold text-success">WA terkirim <%= wa_ok %> nomor</span><% } %>
+      </div>
+    <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
       <div>
