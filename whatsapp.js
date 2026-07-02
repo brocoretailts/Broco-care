@@ -16,6 +16,70 @@ const RECONNECT_DELAY = 10000;
 const MAX_FAILED_MSGS = 50;
 
 let failedMessages = [];
+let tursoWaClient = null;
+
+function getTurso() {
+  if (tursoWaClient) return tursoWaClient;
+  if (process.env.TURSO_DB_URL) {
+    try {
+      const { createClient } = require('@libsql/client');
+      tursoWaClient = createClient({
+        url: process.env.TURSO_DB_URL,
+        authToken: process.env.TURSO_DB_TOKEN || '',
+      });
+    } catch (e) {
+      console.error('WA Turso init error:', e.message);
+    }
+  }
+  return tursoWaClient;
+}
+
+async function ensureAuthTable() {
+  var t = getTurso();
+  if (!t) return;
+  try {
+    await t.execute("CREATE TABLE IF NOT EXISTS wa_auth (key TEXT PRIMARY KEY, value TEXT)");
+  } catch (e) {
+    console.error('WA ensureAuthTable error:', e.message);
+  }
+}
+
+async function saveAuthToTurso() {
+  var t = getTurso();
+  if (!t) return;
+  try {
+    if (!fs.existsSync(SESSION_DIR)) return;
+    var files = fs.readdirSync(SESSION_DIR);
+    for (var f of files) {
+      var fp = path.join(SESSION_DIR, f);
+      var stat = fs.statSync(fp);
+      if (stat.isFile() && stat.size < 500000) {
+        var content = fs.readFileSync(fp, 'utf-8');
+        await t.execute("INSERT OR REPLACE INTO wa_auth (key, value) VALUES (?, ?)", [f, content]);
+      }
+    }
+  } catch (e) {
+    console.error('saveAuthToTurso error:', e.message);
+  }
+}
+
+async function loadAuthFromTurso() {
+  var t = getTurso();
+  if (!t) return false;
+  try {
+    var rows = await t.execute("SELECT key, value FROM wa_auth");
+    if (!rows || !rows.rows || !rows.rows.length) return false;
+    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    for (var row of rows.rows) {
+      fs.writeFileSync(path.join(SESSION_DIR, row.key), row.value, 'utf-8');
+    }
+    console.log('Restored WA auth from Turso (' + rows.rows.length + ' files)');
+    return true;
+  } catch (e) {
+    console.error('loadAuthFromTurso error:', e.message);
+    return false;
+  }
+}
 
 async function init() {
   if (initPromise) return initPromise;
@@ -25,6 +89,10 @@ async function init() {
     ready = false;
     lastQr = null;
     try {
+      await ensureAuthTable();
+      if (!fs.existsSync(SESSION_DIR) || !fs.readdirSync(SESSION_DIR).length) {
+        await loadAuthFromTurso();
+      }
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
       const { version } = await fetchLatestBaileysVersion();
       sock = makeWASocket({
@@ -38,7 +106,10 @@ async function init() {
       sock.ev.on('error', function(err) {
         console.error('Baileys socket error (ignored):', err.message);
       });
-      sock.ev.on('creds.update', saveCreds);
+      sock.ev.on('creds.update', function() {
+        saveCreds();
+        saveAuthToTurso();
+      });
       sock.ev.on('connection.update', function(update) {
         var { connection, lastDisconnect, qr } = update;
         if (qr) {
@@ -49,6 +120,7 @@ async function init() {
           ready = true;
           lastQr = null;
           console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
+          saveAuthToTurso();
         }
         if (connection === 'close') {
           ready = false;
@@ -188,16 +260,6 @@ async function sendApprovalNotification(phone, ticketNo, customer) {
   }
 }
 
-async function sendFollowUpApprovalNotification(phone, ticketNo, customer) {
-  try {
-    var msg = '\uD83D\uDD14 *FOLLOW-UP APPROVAL*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nFollow-up ticket membutuhkan re-approval Anda.' + appLink('/management/approval');
-    return await sendWithRetry(phone, msg);
-  } catch (e) {
-    console.error('sendFollowUpApprovalNotification error:', e.message);
-    return false;
-  }
-}
-
 async function sendApprovedNotification(phone, ticketNo) {
   try {
     var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
@@ -259,7 +321,6 @@ module.exports = {
   sendWaMessage: sendWaMessage,
   sendWithRetry: sendWithRetry,
   sendApprovalNotification: sendApprovalNotification,
-  sendFollowUpApprovalNotification: sendFollowUpApprovalNotification,
   sendApprovedNotification: sendApprovedNotification,
   sendRejectedNotification: sendRejectedNotification,
   sendScheduleNotification: sendScheduleNotification,

@@ -473,7 +473,7 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
     if (ticket) {
       var phones = await getManagementPhones();
-      if (phones.length) await wa.sendToMany(phones, wa.sendFollowUpApprovalNotification, ticket.ticket_no, ticket.customer_name);
+      if (phones.length) await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
     }
     res.redirect(`/admin/tickets/${req.params.id}`);
   } catch (e) {
@@ -1294,7 +1294,7 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     const ticket1 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
     if (ticket1) {
       var mgmtPhones = await getManagementPhones();
-      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendFollowUpApprovalNotification, ticket1.ticket_no, ticket1.customer_name);
+      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendApprovalNotification, ticket1.ticket_no, ticket1.customer_name);
     }
   } else if (body.solusi === 'Tidak Bisa Diperbaiki') {
     const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
@@ -1311,7 +1311,7 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     const ticket2 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
     if (ticket2) {
       var mgmtPhones = await getManagementPhones();
-      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendFollowUpApprovalNotification, ticket2.ticket_no, ticket2.customer_name);
+      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendApprovalNotification, ticket2.ticket_no, ticket2.customer_name);
     }
   } else {
     // Normal case - visit completed successfully
