@@ -159,6 +159,9 @@ initDB();
 async function startup() {
   try {
     await ensureTursoTables();
+    if (process.env.TURSO_DB_URL) {
+      try { await exportTursoToLocal(); console.log('Turso → Local sync done'); } catch (e) { console.error('Turso → Local sync error:', e.message); }
+    }
     await seed();
   } catch (e) {
     console.error('Startup DB error (non-fatal):', e.message);
