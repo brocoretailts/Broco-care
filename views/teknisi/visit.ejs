@@ -75,8 +75,8 @@
                 <label class="form-label small">Foto Sebelum</label>
                 <input type="file" name="foto_sebelum" class="form-control form-control-sm" accept="image/*" capture="environment">
                 <% if (visit && visit.foto_sebelum_path) { %>
-                  <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank" class="d-block mt-1">
-                    <img src="/uploads/<%= visit.foto_sebelum_path %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
+                  <a href="<%= imgUrl(visit.foto_sebelum_path) %>" target="_blank" class="d-block mt-1">
+                    <img src="<%= imgUrl(visit.foto_sebelum_path) %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
                   </a>
                 <% } %>
               </div>
@@ -84,8 +84,8 @@
                 <label class="form-label small">Foto Sesudah</label>
                 <input type="file" name="foto_sesudah" class="form-control form-control-sm" accept="image/*" capture="environment">
                 <% if (visit && visit.foto_sesudah_path) { %>
-                  <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank" class="d-block mt-1">
-                    <img src="/uploads/<%= visit.foto_sesudah_path %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
+                  <a href="<%= imgUrl(visit.foto_sesudah_path) %>" target="_blank" class="d-block mt-1">
+                    <img src="<%= imgUrl(visit.foto_sesudah_path) %>" class="img-fluid rounded border" style="max-height:100px;object-fit:cover" loading="lazy">
                   </a>
                 <% } %>
               </div>
@@ -94,7 +94,7 @@
                 <input type="file" name="video" class="form-control form-control-sm" accept="video/*" capture="environment">
                 <% if (visit && visit.video_path) { %>
                   <video controls class="w-100 rounded border mt-1" style="max-height:100px">
-                    <source src="/uploads/<%= visit.video_path %>">
+                    <source src="<%= imgUrl(visit.video_path) %>">
                   </video>
                 <% } %>
               </div>

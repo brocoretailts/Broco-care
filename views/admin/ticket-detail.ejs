@@ -60,10 +60,10 @@
               <div class="col-md-6">
                 <label class="small text-secondary fw-semibold">Faktur Pembelian</label>
                 <% if (ticket.faktur_path.endsWith('.pdf')) { %>
-                  <a href="/uploads/<%= ticket.faktur_path %>" target="_blank" class="btn btn-sm btn-outline-info d-block mt-1"><i class="bi bi-file-earmark-pdf"></i> Lihat PDF Faktur</a>
+                  <a href="<%= imgUrl(ticket.faktur_path) %>" target="_blank" class="btn btn-sm btn-outline-info d-block mt-1"><i class="bi bi-file-earmark-pdf"></i> Lihat PDF Faktur</a>
                 <% } else { %>
-                  <a href="/uploads/<%= ticket.faktur_path %>" target="_blank">
-                    <img src="/uploads/<%= ticket.faktur_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                  <a href="<%= imgUrl(ticket.faktur_path) %>" target="_blank">
+                    <img src="<%= imgUrl(ticket.faktur_path) %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
                   </a>
                 <% } %>
               </div>
@@ -71,16 +71,16 @@
               <% if (ticket.foto_produk_path) { %>
               <div class="col-md-6">
                 <label class="small text-secondary fw-semibold">Foto Produk</label>
-                <a href="/uploads/<%= ticket.foto_produk_path %>" target="_blank">
-                  <img src="/uploads/<%= ticket.foto_produk_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                <a href="<%= imgUrl(ticket.foto_produk_path) %>" target="_blank">
+                  <img src="<%= imgUrl(ticket.foto_produk_path) %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
                 </a>
               </div>
               <% } %>
               <% if (ticket.foto_kerusakan_path) { %>
               <div class="col-md-6">
                 <label class="small text-secondary fw-semibold">Foto Kerusakan</label>
-                <a href="/uploads/<%= ticket.foto_kerusakan_path %>" target="_blank">
-                  <img src="/uploads/<%= ticket.foto_kerusakan_path %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
+                <a href="<%= imgUrl(ticket.foto_kerusakan_path) %>" target="_blank">
+                  <img src="<%= imgUrl(ticket.foto_kerusakan_path) %>" class="img-fluid rounded border mt-1" style="max-height:200px;object-fit:cover" loading="lazy">
                 </a>
               </div>
               <% } %>
@@ -88,7 +88,7 @@
               <div class="col-md-6">
                 <label class="small text-secondary fw-semibold">Video</label>
                 <video controls class="w-100 rounded border mt-1" style="max-height:200px">
-                  <source src="/uploads/<%= ticket.video_path %>">
+                  <source src="<%= imgUrl(ticket.video_path) %>">
                 </video>
               </div>
               <% } %>
@@ -244,16 +244,16 @@
               <% if (visit.foto_sebelum_path) { %>
               <div class="col-6">
                 <small class="text-secondary d-block">Foto Sebelum</small>
-                <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank">
-                  <img src="/uploads/<%= visit.foto_sebelum_path %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
+                <a href="<%= imgUrl(visit.foto_sebelum_path) %>" target="_blank">
+                  <img src="<%= imgUrl(visit.foto_sebelum_path) %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
                 </a>
               </div>
               <% } %>
               <% if (visit.foto_sesudah_path) { %>
               <div class="col-6">
                 <small class="text-secondary d-block">Foto Sesudah</small>
-                <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank">
-                  <img src="/uploads/<%= visit.foto_sesudah_path %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
+                <a href="<%= imgUrl(visit.foto_sesudah_path) %>" target="_blank">
+                  <img src="<%= imgUrl(visit.foto_sesudah_path) %>" class="img-fluid rounded border" style="max-height:120px;object-fit:cover" loading="lazy">
                 </a>
               </div>
               <% } %>
@@ -261,7 +261,7 @@
               <div class="col-12">
                 <small class="text-secondary d-block">Video</small>
                 <video controls class="w-100 rounded border" style="max-height:120px">
-                  <source src="/uploads/<%= visit.video_path %>">
+                  <source src="<%= imgUrl(visit.video_path) %>">
                 </video>
               </div>
               <% } %>
@@ -386,29 +386,29 @@
                 <div style="text-align:center;width:140px;">
                   <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Faktur</div>
                   <% if (ticket.faktur_path.endsWith('.pdf')) { %>
-                    <a href="/uploads/<%= ticket.faktur_path %>" target="_blank" style="display:block;padding:8px;background:#e3f2fd;border-radius:4px;text-decoration:none;color:#1565c0;font-size:12px;">Lihat PDF</a>
+                    <a href="<%= imgUrl(ticket.faktur_path) %>" target="_blank" style="display:block;padding:8px;background:#e3f2fd;border-radius:4px;text-decoration:none;color:#1565c0;font-size:12px;">Lihat PDF</a>
                   <% } else { %>
-                    <a href="/uploads/<%= ticket.faktur_path %>" target="_blank"><img src="/uploads/<%= ticket.faktur_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                    <a href="<%= imgUrl(ticket.faktur_path) %>" target="_blank"><img src="<%= imgUrl(ticket.faktur_path) %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
                   <% } %>
                 </div>
               <% } %>
               <% if (ticket.foto_produk_path) { %>
                 <div style="text-align:center;width:140px;">
                   <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Produk</div>
-                  <a href="/uploads/<%= ticket.foto_produk_path %>" target="_blank"><img src="/uploads/<%= ticket.foto_produk_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                  <a href="<%= imgUrl(ticket.foto_produk_path) %>" target="_blank"><img src="<%= imgUrl(ticket.foto_produk_path) %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
                 </div>
               <% } %>
               <% if (ticket.foto_kerusakan_path) { %>
                 <div style="text-align:center;width:140px;">
                   <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Kerusakan</div>
-                  <a href="/uploads/<%= ticket.foto_kerusakan_path %>" target="_blank"><img src="/uploads/<%= ticket.foto_kerusakan_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                  <a href="<%= imgUrl(ticket.foto_kerusakan_path) %>" target="_blank"><img src="<%= imgUrl(ticket.foto_kerusakan_path) %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
                 </div>
               <% } %>
               <% if (ticket.video_path) { %>
                 <div style="text-align:center;width:140px;">
                   <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Video</div>
                   <video style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;" controls>
-                    <source src="/uploads/<%= ticket.video_path %>">
+                    <source src="<%= imgUrl(ticket.video_path) %>">
                   </video>
                 </div>
               <% } %>
@@ -454,20 +454,20 @@
             <% if (visit.foto_sebelum_path) { %>
               <div style="text-align:center;width:140px;">
                 <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Sebelum</div>
-                <a href="/uploads/<%= visit.foto_sebelum_path %>" target="_blank"><img src="/uploads/<%= visit.foto_sebelum_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                <a href="<%= imgUrl(visit.foto_sebelum_path) %>" target="_blank"><img src="<%= imgUrl(visit.foto_sebelum_path) %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
               </div>
             <% } %>
             <% if (visit.foto_sesudah_path) { %>
               <div style="text-align:center;width:140px;">
                 <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Foto Sesudah</div>
-                <a href="/uploads/<%= visit.foto_sesudah_path %>" target="_blank"><img src="/uploads/<%= visit.foto_sesudah_path %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
+                <a href="<%= imgUrl(visit.foto_sesudah_path) %>" target="_blank"><img src="<%= imgUrl(visit.foto_sesudah_path) %>" style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;"></a>
               </div>
             <% } %>
             <% if (visit.video_path) { %>
               <div style="text-align:center;width:140px;">
                 <div style="font-size:11px;font-weight:600;margin-bottom:4px;">Video</div>
                 <video style="width:130px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ccc;" controls>
-                  <source src="/uploads/<%= visit.video_path %>">
+                  <source src="<%= imgUrl(visit.video_path) %>">
                 </video>
               </div>
             <% } %>

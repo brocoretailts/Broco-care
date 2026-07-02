@@ -12,29 +12,37 @@ const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionS
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
+const cloudinary = require('./cloudinary');
 
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, 'public', 'uploads');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`);
-  }
-});
 const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif','application/pdf','video/mp4','video/webm','video/quicktime'];
 function fileFilter(req, file, cb) {
   if (ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
   console.log('Multer rejected file:', file.fieldname, file.originalname, file.mimetype);
   cb(null, false);
 }
-const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+
+async function saveUploadedFile(file) {
+  if (!file) return null;
+  if (cloudinary.USE_CLOUDINARY) {
+    try {
+      return await cloudinary.uploadBuffer(file.buffer);
+    } catch (e) {
+      console.error('Cloudinary upload failed:', e.message);
+      return null;
+    }
+  }
+  const dir = path.join(__dirname, 'public', 'uploads');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const ext = path.extname(file.originalname);
+  const filename = `${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`;
+  fs.writeFileSync(path.join(dir, filename), file.buffer);
+  return filename;
+}
 
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
@@ -51,6 +59,11 @@ app.use(session({
   }
 }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use((req, res, next) => {
+  res.locals.imgUrl = (p) => { if (!p) return ''; if (p.startsWith('http')) return p; return '/uploads/' + p; };
+  next();
+});
 
 /* ============= RATE LIMIT (login brute-force) ============= */
 var loginAttempts = {};
@@ -335,11 +348,11 @@ app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
       trimStr(body.customer_name, 100), trimStr(body.customer_alamat, 200), trimStr(body.customer_hp, 20),
       trimStr(body.customer_email, 100), trimStr(body.customer_kota, 100), trimStr(body.customer_provinsi, 100),
       body.tanggal_pembelian ? toDDMMYYYY(body.tanggal_pembelian) : null, trimStr(body.toko, 100), trimStr(body.marketplace, 100),
-      trimStr(body.nomor_invoice, 50), files.faktur ? files.faktur[0].filename : null,
+      trimStr(body.nomor_invoice, 50), await saveUploadedFile(files.faktur ? files.faktur[0] : null),
       trimStr(body.serial_number, 100), trimStr(body.keluhan, 1000),
-      files.foto_produk ? files.foto_produk[0].filename : null,
-      files.video ? files.video[0].filename : null,
-      files.foto_kerusakan ? files.foto_kerusakan[0].filename : null
+      await saveUploadedFile(files.foto_produk ? files.foto_produk[0] : null),
+      await saveUploadedFile(files.video ? files.video[0] : null),
+      await saveUploadedFile(files.foto_kerusakan ? files.foto_kerusakan[0] : null)
     ]
   );
 
@@ -347,13 +360,6 @@ app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
     "INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [result.lastInsertRowid, req.session.user.id, 'create', 'Ticket dibuat']
   );
-
-  await run(
-    "INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)",
-    ['management', `Ticket baru ${body.ticket_no} membutuhkan approval`, '/management/approval']
-  );
-
-  wa.sendApprovalNotification(await getManagementPhones(), body.ticket_no, body.customer_name);
 
   res.redirect('/admin/tickets');
 });
@@ -1194,9 +1200,9 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
       foto_sebelum_path=COALESCE(?,foto_sebelum_path), foto_sesudah_path=COALESCE(?,foto_sesudah_path),
       video_path=COALESCE(?,video_path) WHERE ticket_id=?`,
       [now, jam, trimStr(body.hasil_pemeriksaan, 2000), trimStr(body.solusi, 1000), trimStr(body.sparepart, 500), body.tanggal_selesai ? toDDMMYYYY(body.tanggal_selesai) : now,
-       files.foto_sebelum ? files.foto_sebelum[0].filename : null,
-       files.foto_sesudah ? files.foto_sesudah[0].filename : null,
-       files.video ? files.video[0].filename : null,
+       await saveUploadedFile(files.foto_sebelum ? files.foto_sebelum[0] : null),
+       await saveUploadedFile(files.foto_sesudah ? files.foto_sesudah[0] : null),
+       await saveUploadedFile(files.video ? files.video[0] : null),
        req.params.ticketId]);
   } else {
     await runWithResults(
@@ -1204,9 +1210,9 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
         foto_sebelum_path, foto_sesudah_path, video_path, tanggal_selesai)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.params.ticketId, req.session.user.id, now, jam, trimStr(body.hasil_pemeriksaan, 2000), trimStr(body.solusi, 1000), trimStr(body.sparepart, 500),
-       files.foto_sebelum ? files.foto_sebelum[0].filename : null,
-       files.foto_sesudah ? files.foto_sesudah[0].filename : null,
-       files.video ? files.video[0].filename : null,
+       await saveUploadedFile(files.foto_sebelum ? files.foto_sebelum[0] : null),
+       await saveUploadedFile(files.foto_sesudah ? files.foto_sesudah[0] : null),
+       await saveUploadedFile(files.video ? files.video[0] : null),
        body.tanggal_selesai ? toDDMMYYYY(body.tanggal_selesai) : now]
     );
   }
