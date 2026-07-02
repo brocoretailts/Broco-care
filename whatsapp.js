@@ -189,28 +189,65 @@ async function sendApprovalNotification(phone, ticketNo, customer) {
 }
 
 async function sendFollowUpApprovalNotification(phone, ticketNo, customer) {
-  var msg = '\uD83D\uDD14 *FOLLOW-UP APPROVAL*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nFollow-up ticket membutuhkan re-approval Anda.' + appLink('/management/approval');
-  sendWithRetry(phone, msg);
+  try {
+    var msg = '\uD83D\uDD14 *FOLLOW-UP APPROVAL*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nFollow-up ticket membutuhkan re-approval Anda.' + appLink('/management/approval');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendFollowUpApprovalNotification error:', e.message);
+    return false;
+  }
 }
 
 async function sendApprovedNotification(phone, ticketNo) {
-  var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
-  await sendWithRetry(phone, msg);
+  try {
+    var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendApprovedNotification error:', e.message);
+    return false;
+  }
 }
 
 async function sendRejectedNotification(phone, ticketNo) {
-  var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.' + appLink('/admin/tickets');
-  await sendWithRetry(phone, msg);
+  try {
+    var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.' + appLink('/admin/tickets');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendRejectedNotification error:', e.message);
+    return false;
+  }
 }
 
 async function sendScheduleNotification(phone, ticketNo, tanggal, jam) {
-  var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.' + appLink('/teknisi/dashboard');
-  await sendWithRetry(phone, msg);
+  try {
+    var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.' + appLink('/teknisi/dashboard');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendScheduleNotification error:', e.message);
+    return false;
+  }
 }
 
 async function sendScheduleCancelledNotification(phone, ticketNo) {
-  var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.' + appLink('/teknisi/dashboard');
-  await sendWithRetry(phone, msg);
+  try {
+    var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.' + appLink('/teknisi/dashboard');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendScheduleCancelledNotification error:', e.message);
+    return false;
+  }
+}
+
+async function sendToMany(phones, fn) {
+  var args = Array.prototype.slice.call(arguments, 2);
+  if (!phones || !phones.length) return 0;
+  var results = await Promise.allSettled(phones.map(function(p) {
+    return fn(p, ...args).catch(function() { return false; });
+  }));
+  var ok = results.filter(function(r) { return r.status === 'fulfilled' && r.value; }).length;
+  var fail = results.length - ok;
+  if (fail > 0) console.error('WA sendToMany:', fail, 'of', results.length, 'failed');
+  return ok;
 }
 
 function getStatus() {
@@ -227,6 +264,7 @@ module.exports = {
   sendRejectedNotification: sendRejectedNotification,
   sendScheduleNotification: sendScheduleNotification,
   sendScheduleCancelledNotification: sendScheduleCancelledNotification,
+  sendToMany: sendToMany,
   getStatus: getStatus,
   normalizePhone: normalizePhone,
   getQRBase64: getQRBase64,
