@@ -1261,9 +1261,10 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
   }
 
   await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  if (body.solusi === 'Tidak Bisa Diperbaiki' || body.solusi === 'Butuh Sparepart (Follow-up)') {
+  if (body.solusi === 'Tidak Bisa Diperbaiki' || body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)') {
     await run("UPDATE tickets SET follow_up_count = follow_up_count + 1 WHERE id = ?", [req.params.ticketId]);
-    var desc = body.solusi === 'Butuh Sparepart (Follow-up)' ? 'Kunjungan: butuh sparepart, follow-up diperlukan' : 'Kunjungan: masalah belum selesai, butuh follow-up';
+    var descMap = {'Butuh Sparepart (Follow-up)': 'Kunjungan: butuh sparepart, follow-up diperlukan', 'Ganti Baru (Follow-up)': 'Kunjungan: butuh unit baru, follow-up diperlukan'};
+    var desc = descMap[body.solusi] || 'Kunjungan: masalah belum selesai, butuh follow-up';
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.ticketId, req.session.user.id, 'follow_up', desc]);
     var adminIds = await getAdminIds();
