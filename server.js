@@ -1266,21 +1266,25 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     );
   }
 
-  // FIX: Check if this is a follow-up case
-  if (body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)') {
-    // Get current follow-up count
+  // Semua hasil kunjungan: status on_progress, notifikasi admin (in-app)
+  // Follow-up: tambah follow_up_count + log khusus
+  // WA ke management dilakukan ADMIN lewat menu "Ajukan Follow-up"
+  var isFollowUp = (body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)' || body.solusi === 'Tidak Bisa Diperbaiki');
+  
+  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  
+  if (isFollowUp) {
+    // Increment follow_up_count
     const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
     const newCount = (currentFollowUp && currentFollowUp.follow_up_count || 0) + 1;
-    
-    // UPDATE: Change status to 'approval' for follow-up cases
-    await run("UPDATE tickets SET follow_up_count = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", 
-      [newCount, req.params.ticketId]);
+    await run("UPDATE tickets SET follow_up_count = ? WHERE id = ?", [newCount, req.params.ticketId]);
     
     var descMap = {
-      'Butuh Sparepart (Follow-up)': 'Kunjungan: butuh sparepart, follow-up diperlukan', 
-      'Ganti Baru (Follow-up)': 'Kunjungan: butuh unit baru, follow-up diperlukan'
+      'Butuh Sparepart (Follow-up)': 'Kunjungan: butuh sparepart, follow-up dari admin diperlukan',
+      'Ganti Baru (Follow-up)': 'Kunjungan: butuh unit baru, follow-up dari admin diperlukan',
+      'Tidak Bisa Diperbaiki': 'Kunjungan: tidak bisa diperbaiki, follow-up dari admin diperlukan'
     };
-    var desc = descMap[body.solusi] || 'Kunjungan: masalah belum selesai, butuh follow-up';
+    var desc = descMap[body.solusi] || 'Kunjungan: butuh follow-up dari admin';
     
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.ticketId, req.session.user.id, 'follow_up', desc]);
@@ -1288,34 +1292,9 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     var adminIds = await getAdminIds();
     for (const uid of adminIds) {
       await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
-        [uid, 'Kunjungan teknisi: masalah belum selesai, butuh follow-up dari Management', `/admin/tickets/${req.params.ticketId}`]);
-    }
-    
-    const ticket1 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
-    if (ticket1) {
-      var mgmtPhones = await getManagementPhones();
-      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendApprovalNotification, ticket1.ticket_no, ticket1.customer_name);
-    }
-  } else if (body.solusi === 'Tidak Bisa Diperbaiki') {
-    const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
-    const newCount = (currentFollowUp && currentFollowUp.follow_up_count || 0) + 1;
-    await run("UPDATE tickets SET follow_up_count = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", 
-      [newCount, req.params.ticketId]);
-    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
-      [req.params.ticketId, req.session.user.id, 'follow_up', 'Kunjungan: tidak bisa diperbaiki, follow-up dari management diperlukan']);
-    var adminIds = await getAdminIds();
-    for (const uid of adminIds) {
-      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
-        [uid, 'Kunjungan teknisi: tidak bisa diperbaiki, butuh follow-up dari Management', `/admin/tickets/${req.params.ticketId}`]);
-    }
-    const ticket2 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
-    if (ticket2) {
-      var mgmtPhones = await getManagementPhones();
-      if (mgmtPhones.length) await wa.sendToMany(mgmtPhones, wa.sendApprovalNotification, ticket2.ticket_no, ticket2.customer_name);
+        [uid, 'Hasil kunjungan: butuh follow-up dari Admin', `/admin/tickets/${req.params.ticketId}`]);
     }
   } else {
-    // Normal case - visit completed successfully
-    await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
     var adminIds = await getAdminIds();
