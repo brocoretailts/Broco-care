@@ -130,7 +130,9 @@ async function init() {
         printQRInTerminal: false,
         markOnlineOnConnect: false,
         syncFullHistory: false,
-        browser: ['Broco CMS', 'Chrome', '1.0.0']
+        browser: ['Broco CMS', 'Chrome', '1.0.0'],
+        keepAliveIntervalMs: 15000,
+        maxMsgRetryCount: 5
       });
       sock.ev.on('error', function(err) {
         console.error('Baileys socket error (ignored):', err.message);

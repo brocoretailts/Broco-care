@@ -174,5 +174,10 @@ checkStatus();
 setTimeout(refreshQR, 1000);
 loadFailed();
 setInterval(loadFailed, 15000);
+setInterval(checkStatus, 5000);
+setInterval(refreshQR, 30000);
+// real-time event listener: try to detect when user clicks refresh button
+var qrButton = document.querySelector('#qrContainer .btn-primary');
+
 </script>
 <%- include('../partials/footer') %>
