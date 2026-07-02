@@ -30,20 +30,7 @@ function init() {
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-extensions',
-          '--disable-software-rasterizer',
-          '--single-process',
-          '--disable-background-networking',
-          '--disable-sync',
-          '--mute-audio',
-          '--no-first-run',
-          '--disable-notifications',
-          '--disable-background-timer-throttling',
-          '--disable-renderer-backgrounding',
-          '--disable-features=TranslateUI,BlinkGenPropertyTrees,site-per-process,Translate',
-          '--js-flags=--max-heap-size=256 --max-old-space-size=256'
+          '--disable-dev-shm-usage'
         ],
         protocolTimeout: 600000
       }
@@ -213,11 +200,9 @@ function appLink(path) {
   return '\n' + url + (path || '');
 }
 
-async function sendApprovalNotification(managementPhones, ticketNo, customer) {
+async function sendApprovalNotification(phone, ticketNo, customer) {
   var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
-  for (var i = 0; i < managementPhones.length; i++) {
-    await sendWithRetry(managementPhones[i], msg);
-  }
+  await sendWithRetry(phone, msg);
 }
 
 async function sendApprovedNotification(adminPhone, ticketNo) {
