@@ -187,36 +187,23 @@ function initDB() {
 
 async function run(sql, params = []) {
   if (turso) {
-    try { return await turso.execute({ sql, args: params }); } catch (e) { console.error('Turso run error, fallback local:', e.message); }
+    turso.execute({ sql, args: params }).catch(function(e) { console.error('Turso run error:', e.message); });
   }
   return db.prepare(sql).run(params);
 }
 
 async function runWithResults(sql, params = []) {
   if (turso) {
-    try { return await turso.execute({ sql, args: params }); } catch (e) { console.error('Turso runWithResults error, fallback local:', e.message); }
+    turso.execute({ sql, args: params }).catch(function(e) { console.error('Turso runWithResults error:', e.message); });
   }
   return db.prepare(sql).run(params);
 }
 
 async function queryAll(sql, params = []) {
-  if (turso) {
-    try {
-      const r = await turso.execute({ sql, args: params });
-      return rowsToObjects(r.rows, r.columns);
-    } catch (e) { console.error('Turso queryAll error, fallback local:', e.message); }
-  }
   return db.prepare(sql).all(params);
 }
 
 async function queryOne(sql, params = []) {
-  if (turso) {
-    try {
-      const r = await turso.execute({ sql, args: params });
-      const rows = rowsToObjects(r.rows, r.columns);
-      return rows[0] || null;
-    } catch (e) { console.error('Turso queryOne error, fallback local:', e.message); }
-  }
   return db.prepare(sql).get(params) || null;
 }
 
