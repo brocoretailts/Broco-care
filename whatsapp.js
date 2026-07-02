@@ -10,15 +10,26 @@ let ready = false;
 let qrShown = false;
 let lastQr = null;
 let initPromise = null;
+let keepaliveTimer = null;
+let reconnectTimer = null;
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000;
+const KEEPALIVE_INTERVAL = 300000;
+const RECONNECT_DELAY = 10000;
+const MAX_FAILED_MSGS = 50;
+
+let failedMessages = [];
 
 function init() {
   if (initPromise) return initPromise;
   initPromise = new Promise(function(resolve) {
+    cleanup();
     client = new Client({
       authStrategy: new LocalAuth(),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       }
     });
 
@@ -39,17 +50,21 @@ function init() {
       qrShown = false;
       lastQr = null;
       console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
+      startKeepalive();
       resolve(true);
     });
 
     client.on('disconnected', function(reason) {
       ready = false;
       console.log('WhatsApp disconnected:', reason);
+      stopKeepalive();
+      scheduleReconnect();
     });
 
     client.on('auth_failure', function(msg) {
       console.error('WhatsApp auth failure:', msg);
       ready = false;
+      stopKeepalive();
       resolve(false);
     });
 
@@ -62,6 +77,33 @@ function init() {
   return initPromise;
 }
 
+function startKeepalive() {
+  stopKeepalive();
+  keepaliveTimer = setInterval(function() {
+    if (client && ready) {
+      client.pupPage && client.pupPage.evaluate(function() { return 1; }).catch(function() {});
+    }
+  }, KEEPALIVE_INTERVAL);
+}
+
+function stopKeepalive() {
+  if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); }
+  reconnectTimer = setTimeout(function() {
+    console.log('WhatsApp: mencoba reconnect ulang...');
+    initPromise = null;
+    init();
+  }, RECONNECT_DELAY);
+}
+
+function cleanup() {
+  stopKeepalive();
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+}
+
 async function getQRBase64() {
   if (lastQr) {
     return await QRCode.toDataURL(lastQr);
@@ -70,6 +112,7 @@ async function getQRBase64() {
 }
 
 async function forceReconnect() {
+  cleanup();
   if (client) {
     try { await client.destroy(); } catch(e) {}
   }
@@ -95,18 +138,66 @@ function normalizePhone(phone) {
 async function sendWaMessage(phone, message) {
   if (!ready || !client) {
     console.log('WhatsApp not ready. Skipping WA notification to', phone);
+    addFailed(phone, message, 'WA not ready');
     return false;
   }
   try {
     var number = normalizePhone(phone);
     if (!number) return false;
-    var chatId = number;
-    var sent = await client.sendMessage(chatId, message);
+    var sent = await client.sendMessage(number, message);
+    if (sent) {
+      removeFailed(phone, message);
+    }
     return !!sent;
   } catch (e) {
     console.error('WA send error:', e.message);
+    addFailed(phone, message, e.message);
     return false;
   }
+}
+
+function addFailed(phone, message, reason) {
+  failedMessages.unshift({ phone: normalizePhone(phone) || phone, message: message, reason: reason || 'unknown', time: new Date().toISOString() });
+  if (failedMessages.length > MAX_FAILED_MSGS) failedMessages.pop();
+}
+
+function removeFailed(phone, message) {
+  var idx = failedMessages.findIndex(function(f) { return f.phone === phone && f.message === message; });
+  if (idx >= 0) failedMessages.splice(idx, 1);
+}
+
+function getFailedMessages() {
+  return failedMessages;
+}
+
+async function resendMessage(phone, message) {
+  if (!ready || !client) return false;
+  try {
+    var number = normalizePhone(phone);
+    if (!number) return false;
+    var sent = await client.sendMessage(number, message);
+    if (sent) {
+      removeFailed(phone, message);
+    }
+    return !!sent;
+  } catch (e) {
+    console.error('WA resend error:', e.message);
+    return false;
+  }
+}
+
+function clearFailedMessages() {
+  failedMessages = [];
+}
+
+async function sendWithRetry(phone, message, retries) {
+  if (retries === undefined) retries = MAX_RETRIES;
+  for (var i = 0; i < retries; i++) {
+    var ok = await sendWaMessage(phone, message);
+    if (ok) return true;
+    if (i < retries - 1) await new Promise(function(r) { setTimeout(r, RETRY_DELAY); });
+  }
+  return false;
 }
 
 function appLink(path) {
@@ -119,28 +210,28 @@ function appLink(path) {
 async function sendApprovalNotification(managementPhones, ticketNo, customer) {
   var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
   for (var i = 0; i < managementPhones.length; i++) {
-    await sendWaMessage(managementPhones[i], msg);
+    await sendWithRetry(managementPhones[i], msg);
   }
 }
 
 async function sendApprovedNotification(adminPhone, ticketNo) {
   var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
-  await sendWaMessage(adminPhone, msg);
+  await sendWithRetry(adminPhone, msg);
 }
 
 async function sendRejectedNotification(adminPhone, ticketNo) {
   var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.' + appLink('/admin/tickets');
-  await sendWaMessage(adminPhone, msg);
+  await sendWithRetry(adminPhone, msg);
 }
 
 async function sendScheduleNotification(teknisiPhone, ticketNo, tanggal, jam) {
   var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.' + appLink('/teknisi/dashboard');
-  await sendWaMessage(teknisiPhone, msg);
+  await sendWithRetry(teknisiPhone, msg);
 }
 
 async function sendScheduleCancelledNotification(teknisiPhone, ticketNo) {
   var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.' + appLink('/teknisi/dashboard');
-  await sendWaMessage(teknisiPhone, msg);
+  await sendWithRetry(teknisiPhone, msg);
 }
 
 function getStatus() {
@@ -150,6 +241,7 @@ function getStatus() {
 module.exports = {
   init: init,
   sendWaMessage: sendWaMessage,
+  sendWithRetry: sendWithRetry,
   sendApprovalNotification: sendApprovalNotification,
   sendApprovedNotification: sendApprovedNotification,
   sendRejectedNotification: sendRejectedNotification,
@@ -158,5 +250,8 @@ module.exports = {
   getStatus: getStatus,
   normalizePhone: normalizePhone,
   getQRBase64: getQRBase64,
-  forceReconnect: forceReconnect
+  forceReconnect: forceReconnect,
+  getFailedMessages: getFailedMessages,
+  resendMessage: resendMessage,
+  clearFailedMessages: clearFailedMessages
 };

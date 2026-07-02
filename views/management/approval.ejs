@@ -9,13 +9,16 @@
       <div class="card-body">
         <div class="row">
           <div class="col-lg-7">
-            <h5 class="fw-bold text-primary"><%= t.ticket_no %></h5>
+            <h5 class="fw-bold text-primary"><%= t.ticket_no %><% if (t.follow_up_count > 0) { %> <span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat"></i> Follow-up #<%= t.follow_up_count %></span><% } %></h5>
             <table class="table table-sm table-borderless mb-0">
               <tr><td class="text-secondary" style="width: 120px;">Customer</td><td class="fw-semibold"><%= t.customer_name %></td></tr>
               <tr><td class="text-secondary">Produk</td><td><%= t.nama_produk %> <%= t.tipe ? '('+t.tipe+')' : '' %></td></tr>
               <tr><td class="text-secondary">Keluhan</td><td><%= t.keluhan %></td></tr>
               <tr><td class="text-secondary">Analisa Admin</td><td class="text-primary"><%= t.admin_analysis || '-' %></td></tr>
               <tr><td class="text-secondary">Kota</td><td><%= t.customer_kota %></td></tr>
+              <% if (t.follow_up_count > 0) { %>
+              <tr><td class="text-secondary">Follow-up</td><td><span class="badge bg-warning text-dark">#<%= t.follow_up_count %></span></td></tr>
+              <% } %>
             </table>
           </div>
           <div class="col-lg-5">

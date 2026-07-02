@@ -44,7 +44,8 @@ function createTablesLocal() {
     status TEXT DEFAULT 'waiting', admin_analysis TEXT,
     management_decision TEXT, management_comment TEXT,
     approved_by INTEGER, approved_at TEXT, closed_by INTEGER,
-    closed_at TEXT, created_at TEXT DEFAULT (datetime('now','localtime')),
+    closed_at TEXT, follow_up_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
   db.exec(`CREATE TABLE IF NOT EXISTS schedules (
@@ -96,7 +97,8 @@ const TURSO_TABLE_SQL = [
     status TEXT DEFAULT 'waiting', admin_analysis TEXT,
     management_decision TEXT, management_comment TEXT,
     approved_by INTEGER, approved_at TEXT, closed_by INTEGER,
-    closed_at TEXT, created_at TEXT DEFAULT (datetime('now','localtime')),
+    closed_at TEXT, follow_up_count INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   )`,
   `CREATE TABLE IF NOT EXISTS schedules (

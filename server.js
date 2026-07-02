@@ -441,6 +441,23 @@ app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, re
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
+app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, res) => {
+  const ticket = await queryOne("SELECT ticket_no, customer_name, follow_up_count FROM tickets WHERE id = ?", [req.params.id]);
+  if (!ticket) return res.redirect('/admin/tickets');
+  var note = req.body.followup_note || 'Follow-up diperlukan (kunjungan sebelumnya belum selesai)';
+  var newCount = (ticket.follow_up_count || 0) + 1;
+  var analysisNote = '[Follow-up #' + newCount + '] ' + note;
+  var currentAnalysis = ticket.admin_analysis || '';
+  var updatedAnalysis = currentAnalysis ? currentAnalysis + '\n' + analysisNote : analysisNote;
+  await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', follow_up_count = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+    [updatedAnalysis, newCount, req.params.id]);
+  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+    [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
+  await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
+  if (ticket) wa.sendApprovalNotification(await getManagementPhones(), ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
+
 app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
   var { teknisi_id, tanggal, jam, notes } = req.body;
   tanggal = toDDMMYYYY(tanggal);
@@ -940,9 +957,9 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
 });
 
 app.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {
-  await run("DELETE FROM notifications WHERE created_at < datetime('now','-30 days')");
+  await run("DELETE FROM notifications WHERE is_read = 1 AND created_at < datetime('now','-3 days')");
   const notifs = await queryAll(
-    "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0 ORDER BY created_at DESC LIMIT 50",
+    "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) ORDER BY is_read ASC, created_at DESC LIMIT 50",
     [req.session.user.id, req.session.user.role]
   );
   res.render('admin/notifications', {
@@ -1194,12 +1211,23 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
   }
 
   await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
-    [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
-  var adminIds = await getAdminIds();
-  for (const uid of adminIds) {
-    await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
-      [uid, `Teknisi telah mengupload hasil kunjungan untuk ticket`, `/admin/tickets/${req.params.ticketId}`]);
+  if (body.solusi === 'Tidak Bisa Diperbaiki') {
+    await run("UPDATE tickets SET follow_up_count = follow_up_count + 1 WHERE id = ?", [req.params.ticketId]);
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.ticketId, req.session.user.id, 'follow_up', 'Kunjungan: masalah belum selesai, butuh follow-up']);
+    var adminIds = await getAdminIds();
+    for (const uid of adminIds) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        [uid, 'Kunjungan teknisi: masalah belum selesai, butuh follow-up dari Management', `/admin/tickets/${req.params.ticketId}`]);
+    }
+  } else {
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
+    var adminIds = await getAdminIds();
+    for (const uid of adminIds) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        [uid, 'Teknisi telah mengupload hasil kunjungan untuk ticket', `/admin/tickets/${req.params.ticketId}`]);
+    }
   }
 
   res.redirect(`/teknisi/visit/${req.params.ticketId}`);
@@ -1230,7 +1258,8 @@ app.get('/teknisi/history', isAuthenticated, isTeknisi, async (req, res) => {
 });
 
 app.get('/management/notifications', isAuthenticated, isManagement, async (req, res) => {
-  const notifs = await queryAll("SELECT * FROM notifications WHERE role = 'management' AND is_read = 0 ORDER BY created_at DESC LIMIT 50");
+  await run("DELETE FROM notifications WHERE is_read = 1 AND created_at < datetime('now','-3 days')");
+  const notifs = await queryAll("SELECT * FROM notifications WHERE role = 'management' ORDER BY is_read ASC, created_at DESC LIMIT 50");
   res.render('management/notifications', {
     notifs,
     notifCount: 0
@@ -1244,19 +1273,24 @@ app.get('/api/notifications/count', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/notifications/read/:id', isAuthenticated, async (req, res) => {
-  await run("DELETE FROM notifications WHERE id = ?", [req.params.id]);
+  await run("UPDATE notifications SET is_read = 1 WHERE id = ?", [req.params.id]);
   res.json({ ok: true });
 });
 
 app.post('/api/notifications/read-all', isAuthenticated, async (req, res) => {
-  await run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 0",
+  await run("UPDATE notifications SET is_read = 1 WHERE (user_id = ? OR role = ?) AND is_read = 0",
     [req.session.user.id, req.session.user.role]);
   res.json({ ok: true });
 });
 
 app.post('/api/notifications/delete-read', isAuthenticated, async (req, res) => {
-  await run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 1",
+  await run("DELETE FROM notifications WHERE (user_id = ? OR role = ?) AND is_read = 1 AND created_at < datetime('now','-3 days')",
     [req.session.user.id, req.session.user.role]);
+  res.json({ ok: true });
+});
+
+app.post('/api/notifications/cleanup', isAuthenticated, async (req, res) => {
+  await run("DELETE FROM notifications WHERE is_read = 1 AND created_at < datetime('now','-7 days')");
   res.json({ ok: true });
 });
 
@@ -1285,6 +1319,28 @@ app.post('/api/wa/reconnect', isAuthenticated, isAdmin, async (req, res) => {
     res.json({ error: e.message });
   }
 });
+
+app.get('/api/wa/failed', isAuthenticated, async (req, res) => {
+  res.json({ messages: wa.getFailedMessages() });
+});
+
+app.post('/api/wa/resend', isAuthenticated, async (req, res) => {
+  const { phone, message } = req.body;
+  if (!phone || !message) return res.json({ ok: false, error: 'phone and message required' });
+  const ok = await wa.resendMessage(phone, message);
+  res.json({ ok });
+});
+
+app.post('/api/wa/clear-failed', isAuthenticated, async (req, res) => {
+  wa.clearFailedMessages();
+  res.json({ ok: true });
+});
+
+setInterval(async function() {
+  try {
+    await run("DELETE FROM notifications WHERE is_read = 1 AND created_at < datetime('now','-3 days')");
+  } catch(e) { /* ignore */ }
+}, 3600000);
 
 /* ============= 404 HANDLER ============= */
 app.use(function(req, res) {
