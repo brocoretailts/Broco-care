@@ -179,8 +179,13 @@ function appLink(path) {
 }
 
 async function sendApprovalNotification(phone, ticketNo, customer) {
-  var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
-  sendWithRetry(phone, msg);
+  try {
+    var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendApprovalNotification error:', e.message);
+    return false;
+  }
 }
 
 async function sendFollowUpApprovalNotification(phone, ticketNo, customer) {
