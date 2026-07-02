@@ -1,13 +1,11 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcodeTerminal = require('qrcode-terminal');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 
-const SESSION_DIR = path.join(__dirname, '.wwebjs_auth');
-let client = null;
+const SESSION_DIR = path.join(__dirname, '.baileys_auth');
+let sock = null;
 let ready = false;
-let qrShown = false;
 let lastQr = null;
 let initPromise = null;
 let reconnectTimer = null;
@@ -19,77 +17,55 @@ const MAX_FAILED_MSGS = 50;
 
 let failedMessages = [];
 
-function init() {
+async function init() {
   if (initPromise) return initPromise;
-  initPromise = new Promise(async function(resolve) {
+  initPromise = (async function() {
     cleanup();
-    if (client) {
-      try { await client.destroy(); } catch(e) {}
-      client = null;
+    if (sock) { try { sock.end(undefined); } catch(e) {} sock = null; }
+    ready = false;
+    lastQr = null;
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+      const { version } = await fetchLatestBaileysVersion();
+      sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: false,
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+        browser: ['Broco CMS', 'Chrome', '1.0.0']
+      });
+      sock.ev.on('creds.update', saveCreds);
+      sock.ev.on('connection.update', function(update) {
+        var { connection, lastDisconnect, qr } = update;
+        if (qr) {
+          lastQr = qr;
+          console.log('Baileys QR received (scan with WhatsApp)');
+        }
+        if (connection === 'open') {
+          ready = true;
+          lastQr = null;
+          console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
+        }
+        if (connection === 'close') {
+          ready = false;
+          var reason = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 'unknown';
+          console.log('WhatsApp disconnected (reason:', reason, '). Reconnecting in', RECONNECT_DELAY / 1000, 's...');
+          initPromise = null;
+          setTimeout(init, RECONNECT_DELAY);
+        }
+      });
+      return true;
+    } catch (e) {
+      console.error('Baileys init error:', e.message);
+      ready = false;
+      console.log('WhatsApp init failed — retrying in', RECONNECT_DELAY / 1000, 's...');
+      initPromise = null;
+      setTimeout(init, RECONNECT_DELAY);
+      return false;
     }
-    client = new Client({
-      authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
-        ],
-        protocolTimeout: 600000
-      }
-    });
-
-    client.on('qr', function(qr) {
-      lastQr = qr;
-      if (!qrShown) {
-        console.log('\n========================================');
-        console.log('  SCAN QR CODE UNTUK WHATSAPP NOTIF');
-        console.log('  Buka WhatsApp > Settings > Linked Devices');
-        console.log('========================================\n');
-        qrcodeTerminal.generate(qr, { small: true });
-        qrShown = true;
-      }
-    });
-
-    client.on('ready', function() {
-      ready = true;
-      qrShown = false;
-      lastQr = null;
-      console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
-      resolve(true);
-    });
-
-    client.on('disconnected', function(reason) {
-      ready = false;
-      console.log('WhatsApp disconnected:', reason);
-      scheduleReconnect();
-    });
-
-    client.on('auth_failure', function(msg) {
-      console.error('WhatsApp auth failure:', msg);
-      ready = false;
-      resolve(false);
-    });
-
-    client.initialize().catch(function(err) {
-      console.error('WhatsApp init error:', err.message);
-      ready = false;
-      resolve(false);
-      console.log('WhatsApp init failed — retrying in ' + (RECONNECT_DELAY / 1000) + 's...');
-      scheduleReconnect();
-    });
-  });
+  })();
   return initPromise;
-}
-
-function scheduleReconnect() {
-  if (reconnectTimer) { clearTimeout(reconnectTimer); }
-  reconnectTimer = setTimeout(function() {
-    console.log('WhatsApp: mencoba reconnect ulang...');
-    initPromise = null;
-    init();
-  }, RECONNECT_DELAY);
 }
 
 function cleanup() {
@@ -105,16 +81,12 @@ async function getQRBase64() {
 
 async function forceReconnect() {
   cleanup();
-  if (client) {
-    try { await client.destroy(); } catch(e) {}
-  }
+  if (sock) { try { sock.end(undefined); } catch(e) {} }
   ready = false;
-  qrShown = false;
   lastQr = null;
   initPromise = null;
-  var authDir = path.join(__dirname, '.wwebjs_auth');
-  if (fs.existsSync(authDir)) {
-    fs.rmSync(authDir, { recursive: true, force: true });
+  if (fs.existsSync(SESSION_DIR)) {
+    fs.rmSync(SESSION_DIR, { recursive: true, force: true });
   }
   return init();
 }
@@ -124,12 +96,12 @@ function normalizePhone(phone) {
   if (typeof phone !== 'string') return null;
   var num = phone.replace(/[^0-9]/g, '');
   if (num.startsWith('0')) num = '62' + num.substring(1);
-  if (num.startsWith('62')) return num + '@c.us';
+  if (num.startsWith('62')) return num;
   return null;
 }
 
 async function sendWaMessage(phone, message) {
-  if (!ready || !client) {
+  if (!ready || !sock) {
     console.log('WhatsApp not ready. Skipping WA notification to', phone);
     addFailed(phone, message, 'WA not ready');
     return false;
@@ -137,7 +109,8 @@ async function sendWaMessage(phone, message) {
   try {
     var number = normalizePhone(phone);
     if (!number) return false;
-    var sent = await client.sendMessage(number, message);
+    var jid = number + '@s.whatsapp.net';
+    var sent = await sock.sendMessage(jid, { text: message });
     if (sent) {
       removeFailed(phone, message);
     }
@@ -146,11 +119,6 @@ async function sendWaMessage(phone, message) {
     var errMsg = e.message || String(e);
     console.error('WA send error:', errMsg);
     addFailed(phone, message, errMsg);
-    if (errMsg.includes('timed out') || errMsg.includes('Timeout') || errMsg.includes('Protocol error')) {
-      console.log('WA timeout detected — triggering reconnect...');
-      ready = false;
-      scheduleReconnect();
-    }
     return false;
   }
 }
@@ -170,11 +138,12 @@ function getFailedMessages() {
 }
 
 async function resendMessage(phone, message) {
-  if (!ready || !client) return false;
+  if (!ready || !sock) return false;
   try {
     var number = normalizePhone(phone);
     if (!number) return false;
-    var sent = await client.sendMessage(number, message);
+    var jid = number + '@s.whatsapp.net';
+    var sent = await sock.sendMessage(jid, { text: message });
     if (sent) {
       removeFailed(phone, message);
     }
@@ -211,24 +180,24 @@ async function sendApprovalNotification(phone, ticketNo, customer) {
   await sendWithRetry(phone, msg);
 }
 
-async function sendApprovedNotification(adminPhone, ticketNo) {
+async function sendApprovedNotification(phone, ticketNo) {
   var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
-  await sendWithRetry(adminPhone, msg);
+  await sendWithRetry(phone, msg);
 }
 
-async function sendRejectedNotification(adminPhone, ticketNo) {
+async function sendRejectedNotification(phone, ticketNo) {
   var msg = '\u274C *TICKET DITOLAK*\n\nTicket: ' + ticketNo + '\n\nManagement telah menolak ticket.' + appLink('/admin/tickets');
-  await sendWithRetry(adminPhone, msg);
+  await sendWithRetry(phone, msg);
 }
 
-async function sendScheduleNotification(teknisiPhone, ticketNo, tanggal, jam) {
+async function sendScheduleNotification(phone, ticketNo, tanggal, jam) {
   var msg = '\uD83D\uDCC5 *JADWAL KUNJUNGAN BARU*\n\nTicket: ' + ticketNo + '\nTanggal: ' + tanggal + '\nJam: ' + jam + '\n\nSilakan cek aplikasi Broco CMS untuk detail.' + appLink('/teknisi/dashboard');
-  await sendWithRetry(teknisiPhone, msg);
+  await sendWithRetry(phone, msg);
 }
 
-async function sendScheduleCancelledNotification(teknisiPhone, ticketNo) {
+async function sendScheduleCancelledNotification(phone, ticketNo) {
   var msg = '\u26A0\uFE0F *JADWAL DIBATALKAN*\n\nTicket: ' + ticketNo + '\n\nJadwal kunjungan telah dibatalkan.' + appLink('/teknisi/dashboard');
-  await sendWithRetry(teknisiPhone, msg);
+  await sendWithRetry(phone, msg);
 }
 
 function getStatus() {
