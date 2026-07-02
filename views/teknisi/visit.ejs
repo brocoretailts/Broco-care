@@ -54,7 +54,7 @@
               <div class="mb-2">
                 <label class="form-label small">Solusi</label>
                 <div class="d-flex gap-2 flex-wrap">
-                  <% ['Servis','Ganti Sparepart','Ganti Unit','Tidak Bisa Diperbaiki'].forEach(function(opt) { %>
+                  <% ['Servis','Ganti Sparepart','Ganti Unit','Butuh Sparepart (Follow-up)','Tidak Bisa Diperbaiki'].forEach(function(opt) { %>
                   <div class="form-check">
                     <input class="form-check-input" type="radio" name="solusi" value="<%= opt %>" id="sol_<%= opt.replace(/\s/g,'') %>"
                       <%= visit && visit.solusi === opt ? 'checked' : '' %> required>
