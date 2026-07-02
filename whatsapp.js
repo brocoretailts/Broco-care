@@ -128,6 +128,7 @@ async function forceReconnect() {
 
 function normalizePhone(phone) {
   if (!phone) return null;
+  if (typeof phone !== 'string') return null;
   var num = phone.replace(/[^0-9]/g, '');
   if (num.startsWith('0')) num = '62' + num.substring(1);
   if (num.startsWith('62')) return num + '@c.us';

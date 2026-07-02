@@ -444,7 +444,10 @@ app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, re
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
   const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
-  if (ticket) wa.sendApprovalNotification(await getManagementPhones(), ticket.ticket_no, ticket.customer_name);
+  if (ticket) {
+    var phones = await getManagementPhones();
+    for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
+  }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
@@ -461,7 +464,10 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
-  if (ticket) wa.sendApprovalNotification(await getManagementPhones(), ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
+  if (ticket) {
+    var phones = await getManagementPhones();
+    for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
+  }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
@@ -1070,12 +1076,13 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
         [decision, comment || '', req.params.id]);
       await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'reject', `Ditolak: ${comment || 'Tidak ada komentar'}`]);
-      var adminIds = await getAdminIds();
-      for (const uid of adminIds) {
+      var adminIdsReject = await getAdminIds();
+      for (const uid of adminIdsReject) {
         await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket ditolak oleh Management`, `/admin/tickets/${req.params.id}`]);
       }
-      wa.sendRejectedNotification(await getAdminPhones(), tickNo);
+      var adminPhones = await getAdminPhones();
+      for (const p of adminPhones) wa.sendRejectedNotification(p, tickNo);
     } else {
       await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
         [decision, comment || '', req.session.user.id, req.params.id]);
@@ -1086,7 +1093,8 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
         await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket disetujui Management, silakan buat jadwal`, `/admin/tickets/${req.params.id}`]);
       }
-      wa.sendApprovedNotification(await getAdminPhones(), tickNo);
+      var adminPhones = await getAdminPhones();
+      for (const p of adminPhones) wa.sendApprovedNotification(p, tickNo);
     }
     res.redirect('/management/approval');
   } catch (e) {
