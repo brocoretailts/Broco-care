@@ -4,12 +4,12 @@
   <%- include('../partials/sidebar') %>
   <main class="main-content">
     <% if (typeof wa_error !== 'undefined' && wa_error === '1') { %>
-      <div class="alert alert-danger py-2 mb-2">ERROR follow-up — cek <a href="/admin/debug-logs">Debug Logs</a> untuk detail.</div>
+      <div class="alert alert-danger py-2 mb-2">ERROR follow-up — cek halaman Debug Logs di menu Pengaturan.</div>
     <% } %>
     <% if (typeof wa_ok !== 'undefined') { %>
       <div class="alert alert-<%= wa_ok === '0' ? 'danger' : 'success' %> py-2 mb-2">
-        WA: <strong><%= wa_ok %>/<%= wa_total || '?' %></strong> terkirim ke management.
-        <% if (wa_ok === '0') { %>Cek koneksi WA di <a href="/admin/whatsapp">WhatsApp Settings</a> atau lihat <a href="/admin/debug-logs">Debug Logs</a>.<% } %>
+        Follow-up: WA <strong><%= wa_ok %>/<%= wa_total || '?' %></strong> terkirim ke management.
+        <% if (wa_ok === '0') { %>Cek koneksi WA di menu WhatsApp.<% } %>
       </div>
     <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
