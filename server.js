@@ -470,9 +470,7 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
   var phones = await getManagementPhones();
-  for (const p of phones) {
-    try { await wa.sendFollowUpApprovalNotification(p, ticket.ticket_no, ticket.customer_name); } catch (e) { console.error('WA follow-up send error:', e.message); }
-  }
+  for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
