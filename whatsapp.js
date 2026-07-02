@@ -180,6 +180,11 @@ async function sendApprovalNotification(phone, ticketNo, customer) {
   await sendWithRetry(phone, msg);
 }
 
+async function sendFollowUpApprovalNotification(phone, ticketNo, customer) {
+  var msg = '\uD83D\uDD14 *FOLLOW-UP APPROVAL*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nFollow-up ticket membutuhkan re-approval Anda.' + appLink('/management/approval');
+  await sendWithRetry(phone, msg);
+}
+
 async function sendApprovedNotification(phone, ticketNo) {
   var msg = '\u2705 *TICKET DISETUJUI*\n\nTicket: ' + ticketNo + '\n\nManagement telah menyetujui ticket. Silakan buat jadwal teknisi.' + appLink('/admin/tickets');
   await sendWithRetry(phone, msg);
@@ -209,6 +214,7 @@ module.exports = {
   sendWaMessage: sendWaMessage,
   sendWithRetry: sendWithRetry,
   sendApprovalNotification: sendApprovalNotification,
+  sendFollowUpApprovalNotification: sendFollowUpApprovalNotification,
   sendApprovedNotification: sendApprovedNotification,
   sendRejectedNotification: sendRejectedNotification,
   sendScheduleNotification: sendScheduleNotification,

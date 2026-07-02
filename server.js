@@ -469,10 +469,8 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
-  if (ticket) {
-    var phones = await getManagementPhones();
-    for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
-  }
+  var phones = await getManagementPhones();
+  for (const p of phones) await wa.sendFollowUpApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
