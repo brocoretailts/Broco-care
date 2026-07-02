@@ -110,14 +110,20 @@ function normalizePhone(phone) {
 async function sendWaMessage(phone, message) {
   if (!ready || !sock) {
     console.log('WhatsApp not ready. Skipping WA notification to', phone);
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_not_ready', 'phone=' + phone + ' ready=' + ready + ' sock=' + !!sock);
     addFailed(phone, message, 'WA not ready');
     return false;
   }
   try {
     var number = normalizePhone(phone);
-    if (!number) return false;
+    if (!number) {
+      if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_bad_phone', 'phone=' + phone + ' normalized=null');
+      return false;
+    }
     var jid = number + '@s.whatsapp.net';
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_sending', 'jid=' + jid + ' msg_len=' + message.length);
     var sent = await sock.sendMessage(jid, { text: message });
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_sent', 'jid=' + jid + ' sent=' + !!sent);
     if (sent) {
       removeFailed(phone, message);
     }
@@ -125,6 +131,7 @@ async function sendWaMessage(phone, message) {
   } catch (e) {
     var errMsg = e.message || String(e);
     console.error('WA send error:', errMsg);
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_error', 'phone=' + phone + ' error=' + errMsg + ' stack=' + (e.stack || ''));
     addFailed(phone, message, errMsg);
     return false;
   }
@@ -167,11 +174,14 @@ function clearFailedMessages() {
 
 async function sendWithRetry(phone, message, retries) {
   if (retries === undefined) retries = MAX_RETRIES;
+  if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWithRetry', 'phone=' + phone + ' retries=' + retries + ' ready=' + ready);
   for (var i = 0; i < retries; i++) {
     var ok = await sendWaMessage(phone, message);
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWithRetry_attempt', 'phone=' + phone + ' attempt=' + (i+1) + ' ok=' + ok);
     if (ok) return true;
     if (i < retries - 1) await new Promise(function(r) { setTimeout(r, RETRY_DELAY); });
   }
+  if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWithRetry_failed', 'phone=' + phone + ' all retries exhausted');
   return false;
 }
 
@@ -184,10 +194,14 @@ function appLink(path) {
 
 async function sendApprovalNotification(phone, ticketNo, customer) {
   try {
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendApprovalNotification', 'phone=' + phone + ' ticketNo=' + ticketNo + ' customer=' + customer);
     var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
-    return await sendWithRetry(phone, msg);
+    var result = await sendWithRetry(phone, msg);
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendApprovalNotification_result', 'phone=' + phone + ' result=' + result);
+    return result;
   } catch (e) {
     console.error('sendApprovalNotification error:', e.message);
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendApprovalNotification_error', 'phone=' + phone + ' error=' + e.message);
     return false;
   }
 }
@@ -235,11 +249,16 @@ async function sendScheduleCancelledNotification(phone, ticketNo) {
 async function sendToMany(phones, fn) {
   var args = Array.prototype.slice.call(arguments, 2);
   if (!phones || !phones.length) return 0;
+  if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendToMany_start', 'Phones: ' + JSON.stringify(phones) + ' fn: ' + (fn.name || 'anon') + ' args: ' + JSON.stringify(args));
   var results = await Promise.allSettled(phones.map(function(p) {
-    return fn(p, ...args).catch(function() { return false; });
+    return fn(p, ...args).catch(function(e) {
+      if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendToMany_fn_catch', 'Phone ' + p + ' failed: ' + (e && e.message));
+      return false;
+    });
   }));
   var ok = results.filter(function(r) { return r.status === 'fulfilled' && r.value; }).length;
   var fail = results.length - ok;
+  if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendToMany_end', 'ok=' + ok + ' fail=' + fail + ' total=' + results.length);
   if (fail > 0) console.error('WA sendToMany:', fail, 'of', results.length, 'failed');
   return ok;
 }

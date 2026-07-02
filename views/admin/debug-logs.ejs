@@ -1,0 +1,40 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-3"><i class="bi bi-bug me-2"></i>Debug Logs</h4>
+    <div class="mb-2 d-flex gap-2">
+      <form method="GET" class="d-flex gap-2 align-items-center">
+        <label class="small">Tampilkan</label>
+        <select name="limit" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
+          <option value="50" <%= limit === 50 ? 'selected' : '' %>>50</option>
+          <option value="100" <%= limit === 100 ? 'selected' : '' %>>100</option>
+          <option value="500" <%= limit === 500 ? 'selected' : '' %>>500</option>
+        </select>
+        <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Go</button></noscript>
+      </form>
+      <span class="small text-secondary align-self-center"><%= logs.length %> log entries</span>
+    </div>
+    <div style="max-height:calc(100vh - 200px);overflow-y:auto">
+      <table class="table table-sm table-bordered" style="font-size:11px;font-family:monospace">
+        <thead class="sticky-top bg-white">
+          <tr><th>#</th><th>Time</th><th>Type</th><th>Message</th></tr>
+        </thead>
+        <tbody>
+          <% logs.forEach(function(l) { %>
+          <tr class="<%= l.type.includes('error') ? 'table-danger' : l.type.includes('_start') ? 'table-success' : '' %>">
+            <td class="text-secondary"><%= l.id %></td>
+            <td class="text-nowrap"><%= l.created_at %></td>
+            <td><code><%= l.type %></code></td>
+            <td style="word-break:break-all"><%= l.message %><% if (l.detail) { %><pre class="mt-1 mb-0" style="font-size:10px;background:#f8f9fa;padding:4px;max-width:600px;overflow-x:auto"><%= l.detail %></pre><% } %></td>
+          </tr>
+          <% }) %>
+          <% if (!logs.length) { %>
+          <tr><td colspan="4" class="text-center text-secondary py-3">Belum ada log</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+<%- include('../partials/footer') %>

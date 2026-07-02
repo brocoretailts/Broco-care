@@ -9,11 +9,13 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
 const cloudinary = require('./cloudinary');
+
+global.logDebug = logDebug;
 
 const app = express();
 app.set('trust proxy', 1);
@@ -438,10 +440,9 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
 
   res.render('admin/ticket-detail', {
     ticket, schedule, visit, logs, teknisi,
-    wa_failed: req.query.wa_failed,
-    wa_ok: req.query.wa,
-    wa_phones: req.query.wp,
-    error: req.query.error,
+    wa_ok: req.query.wa_ok,
+    wa_total: req.query.wa_total,
+    wa_error: req.query.wa_error,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });
@@ -463,8 +464,10 @@ app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, re
 
 app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, res) => {
   try {
+    await logDebug('followup_start', 'Follow-up dimulai untuk ticket ID ' + req.params.id, JSON.stringify({ body: req.body, session: req.session.user?.id }));
     var note = req.body.followup_note || 'Follow-up diperlukan (kunjungan sebelumnya belum selesai)';
     var curTicket = await queryOne("SELECT ticket_no, customer_name, COALESCE(follow_up_count,0) as fcount, COALESCE(admin_analysis,'') as aanalysis FROM tickets WHERE id = ?", [req.params.id]);
+    await logDebug('followup_curTicket', 'curTicket: ' + JSON.stringify(curTicket));
     if (!curTicket) return res.redirect('/admin/tickets');
     var newCount = curTicket.fcount + 1;
     var analysisNote = '[Follow-up #' + newCount + '] ' + note;
@@ -474,30 +477,32 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
-
+    await logDebug('followup_db_done', 'DB updates selesai');
     const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
     var waOk = 0;
     var totalPhones = 0;
-    var debug = '';
     if (ticket) {
+      await logDebug('followup_get_phones', 'Mengambil management phones');
       var phones = await getManagementPhones();
       totalPhones = phones.length;
-      debug = 'phones=[' + phones.join(',') + '] ';
+      await logDebug('followup_phones', 'Management phones: ' + JSON.stringify(phones) + ' count=' + totalPhones);
       if (phones.length) {
+        await logDebug('followup_send_wa', 'Memanggil sendToMany untuk ' + phones.length + ' nomor');
         waOk = await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
-        debug += 'sendToMany returned ' + waOk;
+        await logDebug('followup_send_result', 'sendToMany selesai: waOk=' + waOk);
       } else {
-        debug += 'NO MANAGEMENT PHONES FOUND';
+        await logDebug('followup_no_phones', 'TIDAK ADA management phones — WA tidak dikirim');
       }
     } else {
-      debug = 'TICKET NOT FOUND';
+      await logDebug('followup_no_ticket', 'Ticket NULL setelah update');
     }
     var waStatus = wa.getStatus();
-    debug += ' | WA connected=' + waStatus.connected + ' ready=' + waStatus.qrAvailable;
-    res.send('<html><body style="font-family:sans-serif;padding:40px"><h3>Follow-up Result</h3><p>Ticket: <b>' + curTicket.ticket_no + '</b></p><p>WA: <b>' + waOk + '/' + totalPhones + '</b> terkirim</p><pre style="background:#f5f5f5;padding:10px;font-size:13px">' + debug + '</pre><br><a href="/admin/tickets/' + req.params.id + '">Kembali ke ticket</a></body></html>');
+    await logDebug('followup_wa_status', 'WA status: connected=' + waStatus.connected + ' ready=' + (waStatus.qrAvailable ? 'qr' : 'noqr'));
+    res.redirect('/admin/tickets/' + req.params.id + '?wa_ok=' + waOk + '&wa_total=' + totalPhones);
   } catch (e) {
+    await logDebug('followup_error', 'ERROR: ' + (e.stack || e.message));
     console.error('Followup error:', e.stack || e.message);
-    res.send('<html><body style="font-family:sans-serif;padding:40px"><h3>FOLLOW-UP ERROR</h3><pre style="background:#fff0f0;padding:10px">' + (e.stack || e.message) + '</pre><br><a href="/admin/tickets/' + req.params.id + '">Kembali ke ticket</a></body></html>');
+    res.redirect('/admin/tickets/' + req.params.id + '?wa_error=1');
   }
 });
 
@@ -556,6 +561,16 @@ app.post('/admin/tickets/:id/delete', isAuthenticated, isAdmin, validateCsrf, as
   await run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
   await run("DELETE FROM tickets WHERE id = ?", [req.params.id]);
   res.redirect('/admin/tickets?success=ticket_deleted');
+});
+
+app.get('/admin/debug-logs', isAuthenticated, isAdmin, async (req, res) => {
+  const limit = parseInt(req.query.limit) || 100;
+  const logs = await queryAll("SELECT * FROM debug_logs ORDER BY id DESC LIMIT ?", [limit]);
+  res.render('admin/debug-logs', {
+    logs,
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
+  });
 });
 
 /* ============= CALENDAR SCHEDULING ============= */

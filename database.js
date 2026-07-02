@@ -71,6 +71,11 @@ function createTablesLocal() {
     action TEXT NOT NULL, description TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS debug_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL,
+    message TEXT NOT NULL, detail TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
 }
 
 const TURSO_TABLE_SQL = [
@@ -123,6 +128,11 @@ const TURSO_TABLE_SQL = [
     id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER, user_id INTEGER,
     action TEXT NOT NULL, description TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS debug_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL,
+    message TEXT NOT NULL, detail TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
   )`
 ];
 
@@ -147,13 +157,14 @@ async function ensureTursoTables() {
   } catch (e) { console.error('Timezone migration error:', e.message); }
   
   // Trigger untuk set created_at = WIB setiap INSERT (karena DEFAULT datetime('now','localtime') di Turso = UTC)
-  var triggerTables = ['notifications', 'activity_log', 'tickets', 'schedules', 'visit_results', 'users', 'products'];
+  var triggerTables = ['notifications', 'activity_log', 'debug_logs', 'tickets', 'schedules', 'visit_results', 'users', 'products'];
   for (var tbl of triggerTables) {
     try {
       await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_" + tbl + "_wib AFTER INSERT ON " + tbl + " BEGIN UPDATE " + tbl + " SET created_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] });
     } catch (e) { /* ignore */ }
   }
   try { await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_tickets_wib_upd AFTER INSERT ON tickets BEGIN UPDATE tickets SET updated_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] }); } catch (e) { /* ignore */ }
+  try { await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_debug_logs_wib AFTER INSERT ON debug_logs BEGIN UPDATE debug_logs SET created_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] }); } catch (e) { /* ignore */ }
 }
 
 function initDB() {
@@ -260,7 +271,7 @@ class SQLiteSessionStore extends (require('express-session').Store) {
   }
 }
 
-const SYNC_TABLES = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
+const SYNC_TABLES = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log', 'debug_logs'];
 
 async function syncLocalToTurso() {
   if (!turso || !db) return;
@@ -326,4 +337,12 @@ function nowWIB() {
   return wib.toISOString().replace('T', ' ').substring(0, 19);
 }
 
-module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, SYNC_TABLES };
+async function logDebug(type, message, detail) {
+  try {
+    await run("INSERT INTO debug_logs (type, message, detail) VALUES (?, ?, ?)", [type, message, detail || null]);
+  } catch (e) {
+    console.error('logDebug error:', e.message);
+  }
+}
+
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug, SYNC_TABLES };
