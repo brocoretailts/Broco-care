@@ -1,4 +1,4 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
@@ -122,9 +122,7 @@ async function init() {
       var loaded = await loadAuthFromTurso();
       if (loaded) console.log('WA auth restored from Turso, no QR scan needed');
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-      const { version } = await fetchLatestBaileysVersion();
       sock = makeWASocket({
-        version,
         auth: state,
         printQRInTerminal: false,
         markOnlineOnConnect: false,
