@@ -162,15 +162,9 @@ async function init() {
           var errMsg = lastDisconnect && lastDisconnect.error ? lastDisconnect.error.message || lastDisconnect.error : '';
           initError = 'Disconnected (reason: ' + reason + ') ' + errMsg;
           console.log('WhatsApp disconnected (reason:', reason, ')', errMsg, '. Reconnecting in', RECONNECT_DELAY / 1000, 's...');
-          // Clear corrupted auth from Turso so retry creates fresh creds + QR
-          if (reason == 401 || reason == 500) {
-            console.log('BAD SESSION detected, clearing Turso auth data for fresh start');
-            var t = getTurso();
-            if (t) try { t.execute("DELETE FROM wa_auth", []); } catch(e) {}
-            if (fs.existsSync(SESSION_DIR)) {
-              try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch(e) {}
-            }
-          }
+          // On BAD_SESSION, keep auth in Turso — the validation in loadAuthFromTurso
+          // will skip corrupted entries and restore valid ones. Fresh QR will appear
+          // automatically if no valid auth exists.
           initPromise = null;
           setTimeout(init, RECONNECT_DELAY);
         }
