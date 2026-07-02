@@ -10,6 +10,8 @@
     <% if (query.success === 'user_created') { %><div class="alert alert-success">User baru berhasil ditambahkan!</div><% } %>
     <% if (query.success === 'restored') { %><div class="alert alert-success">Database berhasil direstore!</div><% } %>
     <% if (query.success === 'restore_pending') { %><div class="alert alert-info">Proses restore sedang berjalan...</div><% } %>
+    <% if (query.success === 'reset_data') { %><div class="alert alert-success">Semua data transaksi berhasil dihapus!</div><% } %>
+    <% if (query.success === 'reset_total') { %><div class="alert alert-success">Reset total berhasil! Aplikasi seperti baru.</div><% } %>
     <% if (query.error === 'wrong_password') { %><div class="alert alert-danger">Password saat ini salah!</div><% } %>
     <% if (query.error === 'password_mismatch') { %><div class="alert alert-danger">Password baru tidak cocok!</div><% } %>
     <% if (query.error && query.error.startsWith('Username')) { %><div class="alert alert-danger"><%= query.error %></div><% } %>
@@ -26,6 +28,7 @@
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabPassword">Ubah Password</a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabUsers">Kelola User</a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabBackup">Backup Data</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabData">Data</a></li>
     </ul>
 
     <div class="tab-content">
@@ -151,6 +154,35 @@
                       <button type="submit" class="btn btn-success w-100" onclick="return confirm('Yakin ingin restore lengkap? Semua data + uploads akan diganti!')"><i class="bi bi-upload"></i> Restore Full</button>
                     </div>
                   </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="tabData">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white fw-semibold text-danger"><i class="bi bi-exclamation-triangle me-1"></i> Hapus Data Transaksi</div>
+              <div class="card-body">
+                <p class="small text-secondary">Hapus semua ticket, kunjungan, log aktivitas, notifikasi, dan jadwal. <strong>User & produk tetap aman.</strong></p>
+                <form method="POST" action="/admin/settings/reset-data" onsubmit="return confirm('HAPUS SEMUA TICKET?\n\nUser & produk tetap ada.\n\nData yang terhapus tidak bisa dikembalikan!')">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <button type="submit" class="btn btn-outline-danger w-100"><i class="bi bi-trash3"></i> Hapus Semua Ticket</button>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+              <div class="card-header bg-white fw-semibold text-danger"><i class="bi bi-skull me-1"></i> Reset Total</div>
+              <div class="card-body">
+                <p class="small text-secondary">Hapus <strong>SEMUA</strong> data termasuk user & produk. Aplikasi akan kembali seperti baru. Hanya akun admin utama yang tersisa.</p>
+                <form method="POST" action="/admin/settings/reset-total" onsubmit="return confirm('RESET TOTAL PROGRAM?\n\nSEMUA DATA AKAN HAPUS!\nUser, produk, ticket, semua hilang.\nData tidak bisa dikembalikan!\n\nLanjutkan?')">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <button type="submit" class="btn btn-danger w-100"><i class="bi bi-skull"></i> Reset Total</button>
                 </form>
               </div>
             </div>

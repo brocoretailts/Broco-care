@@ -512,6 +512,15 @@ app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, async (req, res) 
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
+app.post('/admin/tickets/:id/delete', isAuthenticated, isAdmin, validateCsrf, async (req, res) => {
+  await run("DELETE FROM visit_results WHERE ticket_id = ?", [req.params.id]);
+  await run("DELETE FROM activity_log WHERE ticket_id = ?", [req.params.id]);
+  await run("DELETE FROM notifications WHERE link LIKE ?", [`%/admin/tickets/${req.params.id}%`]);
+  await run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
+  await run("DELETE FROM tickets WHERE id = ?", [req.params.id]);
+  res.redirect('/admin/tickets?success=ticket_deleted');
+});
+
 /* ============= CALENDAR SCHEDULING ============= */
 
 app.get('/admin/calendar', isAuthenticated, isAdmin, async (req, res) => {
@@ -961,6 +970,26 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
     try { if (uploadedFile) fs.unlinkSync(uploadedFile); } catch(e2) {}
     res.redirect('/admin/settings?error=restore_failed');
   }
+});
+
+app.post('/admin/settings/reset-data', isAuthenticated, isAdmin, validateCsrf, async (req, res) => {
+  await run("DELETE FROM visit_results");
+  await run("DELETE FROM activity_log");
+  await run("DELETE FROM notifications");
+  await run("DELETE FROM schedules");
+  await run("DELETE FROM tickets");
+  res.redirect('/admin/settings?success=reset_data');
+});
+
+app.post('/admin/settings/reset-total', isAuthenticated, isAdmin, validateCsrf, async (req, res) => {
+  await run("DELETE FROM visit_results");
+  await run("DELETE FROM activity_log");
+  await run("DELETE FROM notifications");
+  await run("DELETE FROM schedules");
+  await run("DELETE FROM tickets");
+  await run("DELETE FROM products");
+  await run("DELETE FROM users WHERE role != 'admin'");
+  res.redirect('/admin/settings?success=reset_total');
 });
 
 app.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {

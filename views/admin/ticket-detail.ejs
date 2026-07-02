@@ -5,7 +5,13 @@
   <main class="main-content">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
-      <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Cetak PDF</button>
+      <div>
+        <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="bi bi-printer"></i> Cetak PDF</button>
+        <form action="/admin/tickets/<%= ticket.id %>/delete" method="POST" style="display:inline" onsubmit="return confirm('Hapus ticket <%= ticket.ticket_no %> permanent?\nSemua data kunjungan & log ikut terhapus.')">
+          <input type="hidden" name="_csrf" value="<%= csrf %>">
+          <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Hapus</button>
+        </form>
+      </div>
     </div>
 
     <div class="row g-3">
