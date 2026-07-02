@@ -1,4 +1,4 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
@@ -9,8 +9,6 @@ let ready = false;
 let lastQr = null;
 let initPromise = null;
 let reconnectTimer = null;
-let initError = null;
-let initAttempts = 0;
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 10000;
@@ -18,112 +16,15 @@ const RECONNECT_DELAY = 10000;
 const MAX_FAILED_MSGS = 50;
 
 let failedMessages = [];
-let tursoWaClient = null;
-
-function getTurso() {
-  if (tursoWaClient) return tursoWaClient;
-  if (process.env.TURSO_DB_URL) {
-    try {
-      const { createClient } = require('@libsql/client');
-      tursoWaClient = createClient({
-        url: process.env.TURSO_DB_URL,
-        authToken: process.env.TURSO_DB_TOKEN || '',
-      });
-    } catch (e) {
-      console.error('WA Turso init error:', e.message);
-    }
-  }
-  return tursoWaClient;
-}
-
-async function ensureAuthTable() {
-  var t = getTurso();
-  if (!t) return;
-  try {
-    await t.execute("CREATE TABLE IF NOT EXISTS wa_auth (key TEXT PRIMARY KEY, value TEXT)");
-  } catch (e) {
-    console.error('WA ensureAuthTable error:', e.message);
-  }
-}
-
-async function saveAuthToTurso() {
-  var t = getTurso();
-  if (!t) return;
-  try {
-    if (!fs.existsSync(SESSION_DIR)) return;
-    var files = fs.readdirSync(SESSION_DIR);
-    for (var f of files) {
-      var fp = path.join(SESSION_DIR, f);
-      var stat = fs.statSync(fp);
-      if (stat.isFile() && stat.size < 500000) {
-        var buf = fs.readFileSync(fp);
-        var b64 = buf.toString('base64');
-        await t.execute("INSERT OR REPLACE INTO wa_auth (key, value) VALUES (?, ?)", [f, b64]);
-      }
-    }
-  } catch (e) {
-    console.error('saveAuthToTurso error:', e.message);
-  }
-}
-
-async function loadAuthFromTurso() {
-  var t = getTurso();
-  if (!t) return false;
-  try {
-    var rows = await t.execute("SELECT key, value FROM wa_auth");
-    if (!rows || !rows.rows || !rows.rows.length) return false;
-    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
-    var validCount = 0;
-    for (var row of rows.rows) {
-      if (row.key.startsWith('_')) continue; // skip internal
-      // validate base64 (ignore old utf-8 data)
-      var buf = Buffer.from(row.value, 'base64');
-      if (!buf || buf.length < 10) {
-        console.log('WA auth skip invalid entry:', row.key);
-        continue;
-      }
-      // verify it looks like valid JSON or Baileys key material
-      var reEncoded = buf.toString('base64');
-      if (reEncoded !== row.value) {
-        console.log('WA auth skip non-base64 entry:', row.key);
-        continue;
-      }
-      fs.writeFileSync(path.join(SESSION_DIR, row.key), buf);
-      validCount++;
-    }
-    if (!validCount) {
-      console.log('WA auth: no valid entries found, clearing all');
-      await t.execute("DELETE FROM wa_auth", []);
-      return false;
-    }
-    console.log('Restored WA auth from Turso (' + validCount + ' files)');
-    return true;
-  } catch (e) {
-    console.error('loadAuthFromTurso error:', e.message);
-    // If error, clear all to force fresh auth
-    try { await t.execute("DELETE FROM wa_auth", []); } catch (e2) {}
-    return false;
-  }
-}
 
 async function init() {
   if (initPromise) return initPromise;
-  initAttempts++;
-  initError = null;
   initPromise = (async function() {
     cleanup();
     if (sock) { try { sock.end(undefined); } catch(e) {} sock = null; }
     ready = false;
     lastQr = null;
     try {
-      await ensureAuthTable();
-      if (fs.existsSync(SESSION_DIR)) {
-        var old = fs.readdirSync(SESSION_DIR);
-        for (var f of old) fs.unlinkSync(path.join(SESSION_DIR, f));
-        fs.rmdirSync(SESSION_DIR);
-      }
-      var loaded = await loadAuthFromTurso();
-      if (loaded) console.log('WA auth restored from Turso, no QR scan needed');
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
       sock = makeWASocket({
         auth: state,
@@ -138,53 +39,32 @@ async function init() {
       });
       sock.ev.on('error', function(err) {
         console.error('Baileys socket error (ignored):', err.message);
-        initError = 'Socket error: ' + err.message;
       });
       sock.ev.on('creds.update', function() {
         saveCreds();
-        saveAuthToTurso();
       });
       sock.ev.on('connection.update', function(update) {
         var { connection, lastDisconnect, qr } = update;
         if (qr) {
           lastQr = qr;
-          initError = null;
           console.log('Baileys QR received (scan with WhatsApp)');
         }
         if (connection === 'open') {
           ready = true;
           lastQr = null;
-          initError = null;
           console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
-          saveAuthToTurso();
         }
         if (connection === 'close') {
           ready = false;
           var reason = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output ? lastDisconnect.error.output.statusCode : 'unknown';
-          var errMsg = lastDisconnect && lastDisconnect.error ? lastDisconnect.error.message || lastDisconnect.error : '';
-          initError = 'Disconnected (reason: ' + reason + ') ' + errMsg;
-          console.log('WhatsApp disconnected (reason:', reason, ')', errMsg, '. Reconnecting in', RECONNECT_DELAY / 1000, 's...');
-          // On BAD_SESSION, keep auth in Turso — the validation in loadAuthFromTurso
-          // will skip corrupted entries and restore valid ones. Fresh QR will appear
-          // automatically if no valid auth exists.
+          console.log('WhatsApp disconnected (reason:', reason, '). Reconnecting in', RECONNECT_DELAY / 1000, 's...');
           initPromise = null;
           setTimeout(init, RECONNECT_DELAY);
         }
       });
-      // watchdog: if no connection.update after 60s, log warning
-      var watchdog = setTimeout(function() {
-        if (!ready && !lastQr) {
-          var warn = 'WA init watchdog: no connection event after 60s (attempt ' + initAttempts + ')';
-          console.warn(warn);
-          if (!initError) initError = warn;
-        }
-      }, 60000);
-      watchdog.unref();
       return true;
     } catch (e) {
-      var msg = e.message || String(e);
-      console.error('Baileys init error:', msg);
-      initError = 'Init error: ' + msg;
+      console.error('Baileys init error:', e.message);
       ready = false;
       console.log('WhatsApp init failed — retrying in', RECONNECT_DELAY / 1000, 's...');
       initPromise = null;
@@ -204,16 +84,6 @@ async function getQRBase64() {
     return await QRCode.toDataURL(lastQr);
   }
   return null;
-}
-
-async function clearAuthAndReconnect() {
-  var t = getTurso();
-  if (t) try { await t.execute("DELETE FROM wa_auth", []); } catch(e) {}
-  if (fs.existsSync(SESSION_DIR)) {
-    try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch(e) {}
-  }
-  initPromise = null;
-  return forceReconnect();
 }
 
 async function forceReconnect() {
@@ -375,7 +245,7 @@ async function sendToMany(phones, fn) {
 }
 
 function getStatus() {
-  return { connected: ready, qrAvailable: !!lastQr, initAttempts: initAttempts, error: initError };
+  return { connected: ready, qrAvailable: !!lastQr };
 }
 
 module.exports = {
@@ -393,7 +263,6 @@ module.exports = {
   normalizePhone: normalizePhone,
   getQRBase64: getQRBase64,
   forceReconnect: forceReconnect,
-  clearAuthAndReconnect: clearAuthAndReconnect,
   getFailedMessages: getFailedMessages,
   resendMessage: resendMessage,
   clearFailedMessages: clearFailedMessages

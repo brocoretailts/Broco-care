@@ -1386,13 +1386,10 @@ app.get('/api/wa/status', isAuthenticated, async (req, res) => {
 app.get('/api/wa/qr-image', isAuthenticated, isAdmin, async (req, res) => {
   try {
     const qrDataUrl = await wa.getQRBase64();
-    var status = wa.getStatus();
     if (qrDataUrl) {
       res.json({ qr: qrDataUrl, connected: false });
     } else {
-      var msg = status.connected ? 'Terhubung' : 'QR belum tersedia';
-      if (status.error) msg += '. Error: ' + status.error;
-      res.json({ qr: null, connected: status.connected, message: msg, error: status.error, attempts: status.initAttempts });
+      res.json({ qr: null, connected: wa.getStatus().connected, message: wa.getStatus().connected ? 'Terhubung' : 'QR belum tersedia, tunggu beberapa saat...' });
     }
   } catch (e) {
     res.json({ error: e.message });
@@ -1403,15 +1400,6 @@ app.post('/api/wa/reconnect', isAuthenticated, isAdmin, async (req, res) => {
   try {
     await wa.forceReconnect();
     res.json({ ok: true, message: 'Memulai ulang koneksi WhatsApp...' });
-  } catch (e) {
-    res.json({ error: e.message });
-  }
-});
-
-app.post('/api/wa/clear-auth', isAuthenticated, isAdmin, async (req, res) => {
-  try {
-    await wa.clearAuthAndReconnect();
-    res.json({ ok: true, message: 'Auth dihapus, koneksi direset. Scan QR baru dalam beberapa detik.' });
   } catch (e) {
     res.json({ error: e.message });
   }

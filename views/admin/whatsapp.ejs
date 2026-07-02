@@ -15,7 +15,6 @@
             <p class="mt-2 mb-0 text-secondary small" id="waStatusText">Menghubungkan ke WhatsApp...</p>
             <div class="mt-3">
               <button class="btn btn-sm btn-outline-danger" onclick="reconnectWA()"><i class="bi bi-plug"></i> Reset Koneksi</button>
-              <button class="btn btn-sm btn-outline-warning ms-2" onclick="clearAuth()"><i class="bi bi-trash"></i> Hapus Auth & QR Baru</button>
             </div>
           </div>
         </div>
@@ -129,14 +128,7 @@ function reconnectWA() {
   });
 }
 
-function clearAuth() {
-  if (!confirm('Hapus semua data auth WhatsApp di server? Scan QR baru setelah ini.')) return;
-  var container = document.getElementById('qrContainer');
-  container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Menghapus auth dan mereset...</p></div>';
-  fetch('/api/wa/clear-auth', { method: 'POST', headers: { 'x-csrf-token': csrfToken } }).then(function(r) { return r.json(); }).then(function() {
-    setTimeout(refreshQR, 10000);
-  });
-}
+
 
 function loadFailed() {
   fetch('/api/wa/failed').then(function(r) { return r.json(); }).then(function(data) {
@@ -186,9 +178,6 @@ setTimeout(refreshQR, 1000);
 loadFailed();
 setInterval(loadFailed, 15000);
 setInterval(checkStatus, 5000);
-setInterval(refreshQR, 30000);
-// real-time event listener: try to detect when user clicks refresh button
-var qrButton = document.querySelector('#qrContainer .btn-primary');
 
 </script>
 <%- include('../partials/footer') %>
