@@ -9,7 +9,7 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
@@ -305,12 +305,12 @@ app.get('/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
 
   const overdueTickets = await queryAll(`
     SELECT t.id, t.ticket_no, t.customer_name, t.customer_hp, t.keluhan, t.created_at, t.status,
-      julianday(datetime('now','localtime')) - julianday(t.created_at) as hari
+      julianday(?) - julianday(t.created_at) as hari
     FROM tickets t
     WHERE t.status NOT IN ('completed','rejected')
-    AND julianday(datetime('now','localtime')) - julianday(t.created_at) > 3
+    AND julianday(?) - julianday(t.created_at) > 3
     ORDER BY hari DESC LIMIT 10
-  `);
+  `, [nowWIB(), nowWIB()]);
 
   res.render('admin/dashboard', {
     stats, topProducts, overdueTickets,
@@ -445,7 +445,7 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
 
 app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, res) => {
   const analysis = req.body.admin_analysis;
-  await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", [analysis, req.params.id]);
+  await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = ? WHERE id = ?", [analysis, nowWIB(), req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
   const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
@@ -465,8 +465,8 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     var newCount = curTicket.fcount + 1;
     var analysisNote = '[Follow-up #' + newCount + '] ' + note;
     var updatedAnalysis = (curTicket.aanalysis || '') + '\n' + analysisNote;
-    await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', follow_up_count = ?, updated_at = datetime('now','localtime') WHERE id = ?",
-      [updatedAnalysis, newCount, req.params.id]);
+    await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', follow_up_count = ?, updated_at = ? WHERE id = ?",
+      [updatedAnalysis, newCount, nowWIB(), req.params.id]);
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
@@ -496,7 +496,7 @@ app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, re
       [req.params.id, teknisi_id, tanggal, jam, notes, req.session.user.id]
     );
   }
-  await run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  await run("UPDATE tickets SET status = 'scheduled', updated_at = ? WHERE id = ?", [nowWIB(), req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'schedule', `Dijadwalkan ke teknisi pada ${tanggal} ${jam}`]);
   await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
@@ -509,7 +509,7 @@ app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, re
 app.post('/admin/tickets/:id/cancel-schedule', isAuthenticated, isAdmin, async (req, res) => {
   const s = await queryOne("SELECT teknisi_id FROM schedules WHERE ticket_id = ?", [req.params.id]);
   await run("DELETE FROM schedules WHERE ticket_id = ?", [req.params.id]);
-  await run("UPDATE tickets SET status = 'waiting', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.id]);
+  await run("UPDATE tickets SET status = 'waiting', updated_at = ? WHERE id = ?", [nowWIB(), req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'schedule', 'Jadwal dibatalkan']);
   if (s) {
@@ -522,8 +522,9 @@ app.post('/admin/tickets/:id/cancel-schedule', isAuthenticated, isAdmin, async (
 });
 
 app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, async (req, res) => {
-  await run("UPDATE tickets SET status = 'completed', closed_by = ?, closed_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
-    [req.session.user.id, req.params.id]);
+  var wib = nowWIB();
+  await run("UPDATE tickets SET status = 'completed', closed_by = ?, closed_at = ?, updated_at = ? WHERE id = ?",
+    [req.session.user.id, wib, wib, req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'close', 'Ticket ditutup']);
   res.redirect(`/admin/tickets/${req.params.id}`);
@@ -593,7 +594,7 @@ app.post('/admin/calendar/schedule', isAuthenticated, isAdmin, async (req, res) 
         [ticket_id, teknisi_id, tanggal, jam, notes, req.session.user.id]
       );
     }
-    await run("UPDATE tickets SET status = 'scheduled', updated_at = datetime('now','localtime') WHERE id = ? AND status IN ('waiting','approval')", [ticket_id]);
+    await run("UPDATE tickets SET status = 'scheduled', updated_at = ? WHERE id = ? AND status IN ('waiting','approval')", [nowWIB(), ticket_id]);
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [ticket_id, req.session.user.id, 'schedule', `Dijadwalkan: ${tanggal} ${jam} - ${teknisi_id}`]);
     await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
@@ -1027,7 +1028,7 @@ app.get('/management/dashboard', isAuthenticated, isManagement, async (req, res)
   try {
     const stats = {
       waiting: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'approval'")).c,
-      completed_this_month: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(datetime('now','localtime'),6,2)")).c,
+      completed_this_month: (await queryOne("SELECT COUNT(*) as c FROM tickets WHERE status = 'completed' AND substr(created_at,6,2) = substr(?,6,2)", [nowWIB()])).c,
       total: (await queryOne("SELECT COUNT(*) as c FROM tickets")).c,
     };
 
@@ -1040,9 +1041,9 @@ app.get('/management/dashboard', isAuthenticated, isManagement, async (req, res)
     const monthlyStats = await queryAll(`
       SELECT substr(created_at,6,2) as bulan, COUNT(*) as total,
         COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as selesai
-      FROM tickets WHERE substr(created_at,1,4) = substr(datetime('now','localtime'),1,4)
+      FROM tickets WHERE substr(created_at,1,4) = substr(?,1,4)
       GROUP BY bulan ORDER BY bulan
-    `);
+    `, [nowWIB()]);
 
     const chartLabels = JSON.stringify(monthlyStats.map(function(m) { return 'Bulan '+m.bulan }));
     const chartTotals = JSON.stringify(monthlyStats.map(function(m) { return m.total }));
@@ -1084,8 +1085,8 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
     const tick = await queryOne("SELECT ticket_no FROM tickets WHERE id = ?", [req.params.id]);
     const tickNo = tick ? tick.ticket_no : `#${req.params.id}`;
     if (decision === 'reject') {
-      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'rejected', updated_at = datetime('now','localtime') WHERE id = ?",
-        [decision, comment || '', req.params.id]);
+      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'rejected', updated_at = ? WHERE id = ?",
+        [decision, comment || '', nowWIB(), req.params.id]);
       await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'reject', `Ditolak: ${comment || 'Tidak ada komentar'}`]);
       var adminIdsReject = await getAdminIds();
@@ -1096,8 +1097,9 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
       var adminPhones = await getAdminPhones();
       if (adminPhones.length) await wa.sendToMany(adminPhones, wa.sendRejectedNotification, tickNo);
     } else {
-      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?",
-        [decision, comment || '', req.session.user.id, req.params.id]);
+      var wib2 = nowWIB();
+      await run("UPDATE tickets SET management_decision = ?, management_comment = ?, status = 'waiting', approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?",
+        [decision, comment || '', req.session.user.id, wib2, wib2, req.params.id]);
       await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'approve', `Disetujui: ${decision} - ${comment || ''}`]);
       var adminIds = await getAdminIds();
@@ -1135,10 +1137,10 @@ app.get('/management/reports', isAuthenticated, isManagement, async (req, res) =
 
     const avgResolution = await queryOne(`
       SELECT AVG(
-        julianday(substr(COALESCE(closed_at, datetime('now','localtime')),1,10)) -
+        julianday(substr(COALESCE(closed_at, ?),1,10)) -
         julianday(substr(created_at,1,10))
       ) as avg_hari FROM tickets WHERE status = 'completed'
-    `);
+    `, [nowWIB()]);
 
     const topTeknisi = await queryAll(`
       SELECT u.name, COUNT(v.id) as total_visit
@@ -1271,8 +1273,8 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
   // WA ke management dilakukan ADMIN lewat menu "Ajukan Follow-up"
   var isFollowUp = (body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)' || body.solusi === 'Tidak Bisa Diperbaiki');
   
-  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  
+  await run("UPDATE tickets SET status = 'on_progress', updated_at = ? WHERE id = ?", [nowWIB(), req.params.ticketId]);
+
   if (isFollowUp) {
     // Increment follow_up_count
     const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
@@ -1308,7 +1310,7 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
 });
 
 app.post('/teknisi/visit/:ticketId/start', isAuthenticated, isTeknisi, async (req, res) => {
-  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
+  await run("UPDATE tickets SET status = 'on_progress', updated_at = ? WHERE id = ?", [nowWIB(), req.params.ticketId]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.ticketId, req.session.user.id, 'start_visit', 'Kunjungan dimulai']);
   res.redirect(`/teknisi/visit/${req.params.ticketId}`);

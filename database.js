@@ -128,9 +128,32 @@ const TURSO_TABLE_SQL = [
 
 async function ensureTursoTables() {
   if (!turso) return;
+  // Turso server uses UTC, so 'localtime' would be wrong. Use fixed +7 hours instead.
   for (const sql of TURSO_TABLE_SQL) {
-    await turso.execute({ sql, args: [] });
+    var fixed = sql.replace(/'now','localtime'/g, "'now','+7 hours'");
+    await turso.execute({ sql: fixed, args: [] });
   }
+  // Migration: fix existing UTC timestamps → WIB (+7h) — only runs once
+  try {
+    await turso.execute({ sql: "CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY, value TEXT)", args: [] });
+    var m = await turso.execute({ sql: "SELECT value FROM _migrations WHERE key = 'tz_fix'", args: [] });
+    if (!m || !m.rows || !m.rows.length) {
+      await turso.execute({ sql: "UPDATE notifications SET created_at = datetime(created_at, '+7 hours')", args: [] });
+      await turso.execute({ sql: "UPDATE activity_log SET created_at = datetime(created_at, '+7 hours')", args: [] });
+      await turso.execute({ sql: "UPDATE tickets SET created_at = datetime(created_at, '+7 hours'), updated_at = datetime(updated_at, '+7 hours')", args: [] });
+      await turso.execute({ sql: "INSERT INTO _migrations (key, value) VALUES ('tz_fix', '1')", args: [] });
+      console.log('Timezone migration: all timestamps shifted +7 hours');
+    }
+  } catch (e) { console.error('Timezone migration error:', e.message); }
+  
+  // Trigger untuk set created_at = WIB setiap INSERT (karena DEFAULT datetime('now','localtime') di Turso = UTC)
+  var triggerTables = ['notifications', 'activity_log', 'tickets', 'schedules', 'visit_results', 'users', 'products'];
+  for (var tbl of triggerTables) {
+    try {
+      await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_" + tbl + "_wib AFTER INSERT ON " + tbl + " BEGIN UPDATE " + tbl + " SET created_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] });
+    } catch (e) { /* ignore */ }
+  }
+  try { await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_tickets_wib_upd AFTER INSERT ON tickets BEGIN UPDATE tickets SET updated_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] }); } catch (e) { /* ignore */ }
 }
 
 function initDB() {
@@ -297,4 +320,10 @@ function prepareBackup() {
   try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) { /* ignore */ }
 }
 
-module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, SYNC_TABLES };
+function nowWIB() {
+  var d = new Date();
+  var wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  return wib.toISOString().replace('T', ' ').substring(0, 19);
+}
+
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, SYNC_TABLES };
