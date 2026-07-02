@@ -457,22 +457,20 @@ app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, re
 });
 
 app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, res) => {
-  const ticket = await queryOne("SELECT ticket_no, customer_name, follow_up_count FROM tickets WHERE id = ?", [req.params.id]);
-  if (!ticket) return res.redirect('/admin/tickets');
   var note = req.body.followup_note || 'Follow-up diperlukan (kunjungan sebelumnya belum selesai)';
-  var newCount = (ticket.follow_up_count || 0) + 1;
+  var newCount = ((await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.id])).follow_up_count || 0) + 1;
   var analysisNote = '[Follow-up #' + newCount + '] ' + note;
-  var currentAnalysis = ticket.admin_analysis || '';
-  var updatedAnalysis = currentAnalysis ? currentAnalysis + '\n' + analysisNote : analysisNote;
+  var current = await queryOne("SELECT admin_analysis FROM tickets WHERE id = ?", [req.params.id]);
+  var updatedAnalysis = (current && current.admin_analysis || '') + '\n' + analysisNote;
   await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', follow_up_count = ?, updated_at = datetime('now','localtime') WHERE id = ?",
     [updatedAnalysis, newCount, req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
-    [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
-  await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
-  var ticket2 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
-  if (ticket2) {
+    [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
+  await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
+  const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+  if (ticket) {
     var phones = await getManagementPhones();
-    for (const p of phones) wa.sendApprovalNotification(p, ticket2.ticket_no, ticket2.customer_name);
+    for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
   }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
