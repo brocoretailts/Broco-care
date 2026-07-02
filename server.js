@@ -476,7 +476,6 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
   }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
-});
 
 app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
   var { teknisi_id, tanggal, jam, notes } = req.body;
