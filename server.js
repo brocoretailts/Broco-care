@@ -1,4 +1,5 @@
 require('dotenv').config();
+process.env.TZ = 'Asia/Jakarta';
 require('express-async-errors');
 const express = require('express');
 const session = require('express-session');
