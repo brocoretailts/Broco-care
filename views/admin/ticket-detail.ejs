@@ -284,11 +284,11 @@
           <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-arrow-repeat me-1"></i>Follow-Up</h6></div>
             <div class="card-body">
-              <p class="small text-secondary mb-2">Kunjungan sebelumnya: <strong><%= visit.solusi %></strong></p>
+              <p class="small text-secondary mb-2">Kunjungan sebelumnya: <strong><%= visit.solusi %></strong><% if (visit.sparepart) { %> — Sparepart: <strong><%= visit.sparepart %></strong><% } %></p>
               <form method="POST" action="/admin/tickets/<%= ticket.id %>/followup">
                 <input type="hidden" name="_csrf" value="<%= csrf %>">
                 <div class="mb-2">
-                  <textarea name="followup_note" class="form-control" rows="2" placeholder="Catatan follow-up..."><% if (ticket.follow_up_count > 0) { %>Follow-up ke-<%= ticket.follow_up_count + 1 %>: perlu kunjungan ulang<% } else { %>Kunjungan sebelumnya belum selesai. Perlu re-schedule kunjungan ulang.<% } %></textarea>
+                  <textarea name="followup_note" class="form-control" rows="2" placeholder="Catatan follow-up..."><% var fuNote = ''; if (ticket.follow_up_count > 0) { fuNote = 'Follow-up ke-' + (ticket.follow_up_count + 1) + ': '; } if (visit.solusi === 'Butuh Sparepart (Follow-up)') { fuNote += (visit.sparepart ? 'Need sparepart: ' + visit.sparepart + '. ' : '') + 'Perlu re-schedule kunjungan dengan membawa sparepart.'; } else if (visit.solusi === 'Ganti Baru (Follow-up)') { fuNote += 'Butuh unit baru. Perlu re-schedule kunjungan dengan membawa unit pengganti.'; } else if (visit.solusi === 'Tidak Bisa Diperbaiki') { fuNote += 'Kunjungan sebelumnya belum selesai. Perlu re-schedule kunjungan ulang.'; } else { fuNote += 'Kunjungan sebelumnya belum selesai. Perlu re-schedule.'; } %><%= fuNote %></textarea>
                 </div>
                 <button type="submit" class="btn btn-warning w-100"><i class="bi bi-send"></i> Ajukan Follow-up ke Management</button>
               </form>
