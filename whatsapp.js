@@ -10,12 +10,10 @@ let ready = false;
 let qrShown = false;
 let lastQr = null;
 let initPromise = null;
-let keepaliveTimer = null;
 let reconnectTimer = null;
 
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000;
-const KEEPALIVE_INTERVAL = 300000;
+const RETRY_DELAY = 8000;
 const RECONNECT_DELAY = 10000;
 const MAX_FAILED_MSGS = 50;
 
@@ -29,7 +27,7 @@ function init() {
       authStrategy: new LocalAuth(),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-extensions', '--disable-software-rasterizer'],
         protocolTimeout: 180000
       }
     });
@@ -51,21 +49,18 @@ function init() {
       qrShown = false;
       lastQr = null;
       console.log('\n\u2713 WhatsApp terhubung! Notifikasi akan dikirim via WA.\n');
-      startKeepalive();
       resolve(true);
     });
 
     client.on('disconnected', function(reason) {
       ready = false;
       console.log('WhatsApp disconnected:', reason);
-      stopKeepalive();
       scheduleReconnect();
     });
 
     client.on('auth_failure', function(msg) {
       console.error('WhatsApp auth failure:', msg);
       ready = false;
-      stopKeepalive();
       resolve(false);
     });
 
@@ -78,21 +73,6 @@ function init() {
   return initPromise;
 }
 
-function startKeepalive() {
-  stopKeepalive();
-  keepaliveTimer = setInterval(function() {
-    if (client && ready && client.pupPage) {
-      client.pupPage.evaluate(function() { return 1; }).catch(function(err) {
-        console.log('WA keepalive ping error:', err.message);
-      });
-    }
-  }, KEEPALIVE_INTERVAL);
-}
-
-function stopKeepalive() {
-  if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
-}
-
 function scheduleReconnect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); }
   reconnectTimer = setTimeout(function() {
@@ -103,7 +83,6 @@ function scheduleReconnect() {
 }
 
 function cleanup() {
-  stopKeepalive();
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 }
 
