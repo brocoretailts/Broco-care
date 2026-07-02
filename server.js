@@ -567,7 +567,7 @@ app.get('/admin/debug-logs', isAuthenticated, isAdmin, async (req, res) => {
   const limit = parseInt(req.query.limit) || 100;
   const logs = await queryAll("SELECT * FROM debug_logs ORDER BY id DESC LIMIT ?", [limit]);
   res.render('admin/debug-logs', {
-    logs,
+    logs, limit,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });
