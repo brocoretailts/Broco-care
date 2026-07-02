@@ -21,10 +21,14 @@ let failedMessages = [];
 
 function init() {
   if (initPromise) return initPromise;
-  initPromise = new Promise(function(resolve) {
+  initPromise = new Promise(async function(resolve) {
     cleanup();
+    if (client) {
+      try { await client.destroy(); } catch(e) {}
+      client = null;
+    }
     client = new Client({
-      authStrategy: new LocalAuth(),
+      authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
       puppeteer: {
         headless: true,
         args: [
@@ -72,6 +76,8 @@ function init() {
       console.error('WhatsApp init error:', err.message);
       ready = false;
       resolve(false);
+      console.log('WhatsApp init failed — retrying in ' + (RECONNECT_DELAY / 1000) + 's...');
+      scheduleReconnect();
     });
   });
   return initPromise;
