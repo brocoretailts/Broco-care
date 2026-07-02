@@ -88,6 +88,7 @@
 </div>
 
 <script>
+var csrfToken = '<%= csrf %>';
 function checkStatus() {
   fetch('/api/wa/status').then(function(r) { return r.json(); }).then(function(data) {
     var badge = document.getElementById('waStatusBadge');
@@ -123,7 +124,7 @@ function reconnectWA() {
   if (!confirm('Reset koneksi WhatsApp? QR baru akan muncul.')) return;
   var container = document.getElementById('qrContainer');
   container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Mereset koneksi...</p></div>';
-  fetch('/api/wa/reconnect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function() {
+  fetch('/api/wa/reconnect', { method: 'POST', headers: { 'x-csrf-token': csrfToken } }).then(function(r) { return r.json(); }).then(function() {
     setTimeout(refreshQR, 5000);
   });
 }
@@ -132,7 +133,7 @@ function clearAuth() {
   if (!confirm('Hapus semua data auth WhatsApp di server? Scan QR baru setelah ini.')) return;
   var container = document.getElementById('qrContainer');
   container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Menghapus auth dan mereset...</p></div>';
-  fetch('/api/wa/clear-auth', { method: 'POST' }).then(function(r) { return r.json(); }).then(function() {
+  fetch('/api/wa/clear-auth', { method: 'POST', headers: { 'x-csrf-token': csrfToken } }).then(function(r) { return r.json(); }).then(function() {
     setTimeout(refreshQR, 10000);
   });
 }
@@ -168,7 +169,7 @@ function resendMsg(index) {
   fetch('/api/wa/failed').then(function(r) { return r.json(); }).then(function(data) {
     var msg = data.messages[index];
     if (!msg) return;
-    fetch('/api/wa/resend', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone: msg.phone, message: msg.message}) })
+    fetch('/api/wa/resend', { method:'POST', headers:{'Content-Type':'application/json','x-csrf-token':csrfToken}, body:JSON.stringify({phone: msg.phone, message: msg.message}) })
     .then(function(r){return r.json()}).then(function(result){
       if (result.ok) { loadFailed(); } else { alert('Gagal mengirim ulang'); }
     });
@@ -177,7 +178,7 @@ function resendMsg(index) {
 
 function clearFailed() {
   if (!confirm('Hapus semua daftar pesan gagal?')) return;
-  fetch('/api/wa/clear-failed', {method:'POST'}).then(function(r){return r.json()}).then(function(){loadFailed()});
+  fetch('/api/wa/clear-failed', {method:'POST', headers:{'x-csrf-token':csrfToken}}).then(function(r){return r.json()}).then(function(){loadFailed()});
 }
 
 checkStatus();
