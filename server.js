@@ -1408,6 +1408,15 @@ app.post('/api/wa/reconnect', isAuthenticated, isAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/wa/clear-auth', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    await wa.clearAuthAndReconnect();
+    res.json({ ok: true, message: 'Auth dihapus, koneksi direset. Scan QR baru dalam beberapa detik.' });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.get('/api/wa/failed', isAuthenticated, async (req, res) => {
   res.json({ messages: wa.getFailedMessages() });
 });

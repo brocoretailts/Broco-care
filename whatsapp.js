@@ -206,6 +206,16 @@ async function getQRBase64() {
   return null;
 }
 
+async function clearAuthAndReconnect() {
+  var t = getTurso();
+  if (t) try { await t.execute("DELETE FROM wa_auth", []); } catch(e) {}
+  if (fs.existsSync(SESSION_DIR)) {
+    try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch(e) {}
+  }
+  initPromise = null;
+  return forceReconnect();
+}
+
 async function forceReconnect() {
   cleanup();
   if (sock) { try { sock.end(undefined); } catch(e) {} }
@@ -383,6 +393,7 @@ module.exports = {
   normalizePhone: normalizePhone,
   getQRBase64: getQRBase64,
   forceReconnect: forceReconnect,
+  clearAuthAndReconnect: clearAuthAndReconnect,
   getFailedMessages: getFailedMessages,
   resendMessage: resendMessage,
   clearFailedMessages: clearFailedMessages

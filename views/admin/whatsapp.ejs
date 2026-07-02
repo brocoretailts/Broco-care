@@ -15,6 +15,7 @@
             <p class="mt-2 mb-0 text-secondary small" id="waStatusText">Menghubungkan ke WhatsApp...</p>
             <div class="mt-3">
               <button class="btn btn-sm btn-outline-danger" onclick="reconnectWA()"><i class="bi bi-plug"></i> Reset Koneksi</button>
+              <button class="btn btn-sm btn-outline-warning ms-2" onclick="clearAuth()"><i class="bi bi-trash"></i> Hapus Auth & QR Baru</button>
             </div>
           </div>
         </div>
@@ -119,11 +120,20 @@ function refreshQR() {
 }
 
 function reconnectWA() {
-  if (!confirm('Reset koneksi WhatsApp? Anda perlu scan QR code ulang.')) return;
+  if (!confirm('Reset koneksi WhatsApp? QR baru akan muncul.')) return;
   var container = document.getElementById('qrContainer');
   container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Mereset koneksi...</p></div>';
   fetch('/api/wa/reconnect', { method: 'POST' }).then(function(r) { return r.json(); }).then(function() {
     setTimeout(refreshQR, 5000);
+  });
+}
+
+function clearAuth() {
+  if (!confirm('Hapus semua data auth WhatsApp di server? Scan QR baru setelah ini.')) return;
+  var container = document.getElementById('qrContainer');
+  container.innerHTML = '<div class="text-secondary py-5"><i class="bi bi-arrow-clockwise" style="font-size: 2rem;"></i><p class="mt-2">Menghapus auth dan mereset...</p></div>';
+  fetch('/api/wa/clear-auth', { method: 'POST' }).then(function(r) { return r.json(); }).then(function() {
+    setTimeout(refreshQR, 10000);
   });
 }
 
