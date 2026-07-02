@@ -44,6 +44,10 @@
                 <p class="mb-0 small">Invoice: <%= ticket.nomor_invoice || '-' %></p>
               </div>
               <div class="col-12">
+                <h6 class="fw-semibold text-secondary"><i class="bi bi-person-badge me-1"></i>Dibuat Oleh</h6>
+                <p class="mb-0"><%= ticket.created_by_name || '-' %></p>
+              </div>
+              <div class="col-12">
                 <h6 class="fw-semibold text-secondary"><i class="bi bi-chat-dots me-1"></i>Keluhan</h6>
                 <p class="mb-0"><%= ticket.keluhan %></p>
               </div>
@@ -356,7 +360,7 @@
             <tr><td class="p-label-cell">Serial</td><td class="p-value-cell"><%= ticket.serial_number || '-' %></td>
                 <td class="p-label-cell">Invoice</td><td class="p-value-cell"><%= ticket.nomor_invoice || '-' %></td></tr>
             <tr><td class="p-label-cell">Garansi</td><td class="p-value-cell"><%= ticket.garansi_bulan || 0 %> bln</td>
-                <td class="p-label-cell"></td><td class="p-value-cell"></td></tr>
+                <td class="p-label-cell">Dibuat Oleh</td><td class="p-value-cell"><%= ticket.created_by_name || '-' %></td></tr>
           </table>
         </div>
       </div>

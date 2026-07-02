@@ -52,6 +52,7 @@
               <th>Pembelian</th>
               <th>Status</th>
               <th>Penanganan</th>
+              <th>Pembuat</th>
               <th>Tanggal</th>
               <th></th>
             </tr>
@@ -78,12 +79,13 @@
                   <span class="badge bg-warning text-dark">Belum</span>
                 <% } %>
               </td>
+              <td><%= t.created_by_name || '-' %></td>
               <td class="small"><%= t.created_at %></td>
               <td><a href="/admin/tickets/<%= t.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
             </tr>
             <% }) %>
             <% if (tickets.length === 0) { %>
-            <tr><td colspan="9" class="text-center text-secondary py-4">Tidak ada ticket</td></tr>
+            <tr><td colspan="10" class="text-center text-secondary py-4">Tidak ada ticket</td></tr>
             <% } %>
           </tbody>
         </table>
@@ -103,12 +105,13 @@
     <div class="p-table" style="display:table;width:100%;">
       <div class="p-tr p-th">
         <div class="p-td" style="width:5%;">No</div>
-        <div class="p-td" style="width:16%;">Ticket</div>
-        <div class="p-td" style="width:16%;">Produk</div>
-        <div class="p-td" style="width:18%;">Customer</div>
-        <div class="p-td" style="width:10%;">Kota</div>
-        <div class="p-td" style="width:12%;">Pembelian</div>
-        <div class="p-td" style="width:11%;">Status</div>
+        <div class="p-td" style="width:14%;">Ticket</div>
+        <div class="p-td" style="width:14%;">Produk</div>
+        <div class="p-td" style="width:16%;">Customer</div>
+        <div class="p-td" style="width:8%;">Kota</div>
+        <div class="p-td" style="width:10%;">Pembelian</div>
+        <div class="p-td" style="width:10%;">Status</div>
+        <div class="p-td" style="width:11%;">Pembuat</div>
         <div class="p-td" style="width:12%;">Tanggal</div>
       </div>
       <% tickets.forEach(function(t, idx) { %>
@@ -120,11 +123,12 @@
         <div class="p-td"><%= t.customer_kota %></div>
         <div class="p-td"><% if (t.marketplace && t.marketplace.trim()) { %><%= t.marketplace %><% if (t.toko && t.toko.trim()) { %><br><small><%= t.toko %></small><% } %><% } else { %><%= t.toko || '-' %><% } %></div>
         <div class="p-td"><span class="p-status p-<%= t.status %>"><%= t.status.toUpperCase().replace('_',' ') %></span><br><span class="p-handle <%= (t.status=='completed'||t.status=='on_progress')?'handled':'unhandled' %>"><%= (t.status=='completed'||t.status=='on_progress')?'SUDAH':(t.status=='rejected'?'-':'BELUM') %></span></div>
+        <div class="p-td"><%= t.created_by_name || '-' %></div>
         <div class="p-td"><%= t.created_at %></div>
       </div>
       <% }) %>
       <% if (tickets.length === 0) { %>
-      <div class="p-tr"><div class="p-td" colspan="8" style="text-align:center;padding:20px;">Tidak ada data</div></div>
+      <div class="p-tr"><div class="p-td" colspan="9" style="text-align:center;padding:20px;">Tidak ada data</div></div>
       <% } %>
     </div>
 

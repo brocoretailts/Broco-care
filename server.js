@@ -121,12 +121,12 @@ app.set('views', path.join(__dirname, 'views'));
 
 async function getManagementPhones() {
   const users = await queryAll("SELECT phone FROM users WHERE role = 'management' AND phone IS NOT NULL");
-  return users.map(u => u.phone).filter(Boolean);
+  return [...new Set(users.map(u => u.phone).filter(Boolean))];
 }
 
 async function getAdminPhones() {
   const users = await queryAll("SELECT phone FROM users WHERE role = 'admin' AND phone IS NOT NULL");
-  return users.map(u => u.phone).filter(Boolean);
+  return [...new Set(users.map(u => u.phone).filter(Boolean))];
 }
 
 async function getAdminIds() {
@@ -376,7 +376,7 @@ app.get('/admin/products/lookup', isAuthenticated, async (req, res) => {
 });
 
 app.get('/admin/tickets', isAuthenticated, isAdmin, async (req, res) => {
-  let sql = `SELECT t.*, p.nama_produk, p.tipe FROM tickets t LEFT JOIN products p ON t.product_id = p.id WHERE 1=1`;
+  let sql = `SELECT t.*, p.nama_produk, p.tipe, u.name as created_by_name FROM tickets t LEFT JOIN products p ON t.product_id = p.id LEFT JOIN users u ON t.created_by = u.id WHERE 1=1`;
   const params = [];
 
   if (req.query.status && req.query.status !== 'all') {
@@ -1056,8 +1056,9 @@ app.get('/management/dashboard', isAuthenticated, isManagement, async (req, res)
 
 app.get('/management/approval', isAuthenticated, isManagement, async (req, res) => {
   const tickets = await queryAll(`
-    SELECT t.*, p.nama_produk, p.tipe
+    SELECT t.*, p.nama_produk, p.tipe, u.name as created_by_name
     FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN users u ON t.created_by = u.id
     WHERE t.status = 'approval' ORDER BY t.created_at DESC
   `);
   await run("UPDATE notifications SET is_read = 1 WHERE role = 'management' AND is_read = 0");

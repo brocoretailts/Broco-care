@@ -16,6 +16,7 @@
               <tr><td class="text-secondary">Keluhan</td><td><%= t.keluhan %></td></tr>
               <tr><td class="text-secondary">Analisa Admin</td><td class="text-primary"><%= t.admin_analysis || '-' %></td></tr>
               <tr><td class="text-secondary">Kota</td><td><%= t.customer_kota %></td></tr>
+              <tr><td class="text-secondary">Dibuat Oleh</td><td><%= t.created_by_name || '-' %></td></tr>
               <% if (t.follow_up_count > 0) { %>
               <tr><td class="text-secondary">Follow-up</td><td><span class="badge bg-warning text-dark">#<%= t.follow_up_count %></span></td></tr>
               <% } %>
