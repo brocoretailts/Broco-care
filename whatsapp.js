@@ -35,6 +35,9 @@ async function init() {
         syncFullHistory: false,
         browser: ['Broco CMS', 'Chrome', '1.0.0']
       });
+      sock.ev.on('error', function(err) {
+        console.error('Baileys socket error (ignored):', err.message);
+      });
       sock.ev.on('creds.update', saveCreds);
       sock.ev.on('connection.update', function(update) {
         var { connection, lastDisconnect, qr } = update;
@@ -101,9 +104,9 @@ function normalizePhone(phone) {
 }
 
 async function sendWaMessage(phone, message) {
-  if (!ready || !sock) {
-    console.log('WhatsApp not ready. Skipping WA notification to', phone);
-    addFailed(phone, message, 'WA not ready');
+  if (!sock) {
+    console.log('WhatsApp not initialized. Skipping WA notification to', phone);
+    addFailed(phone, message, 'WA not initialized');
     return false;
   }
   try {
@@ -177,12 +180,12 @@ function appLink(path) {
 
 async function sendApprovalNotification(phone, ticketNo, customer) {
   var msg = '\uD83D\uDD14 *APPROVAL DIBUTUHKAN*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nAda ticket baru yang membutuhkan approval Anda.' + appLink('/management/approval');
-  await sendWithRetry(phone, msg);
+  return await sendWithRetry(phone, msg);
 }
 
 async function sendFollowUpApprovalNotification(phone, ticketNo, customer) {
   var msg = '\uD83D\uDD14 *FOLLOW-UP APPROVAL*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customer + '\n\nFollow-up ticket membutuhkan re-approval Anda.' + appLink('/management/approval');
-  await sendWithRetry(phone, msg);
+  return await sendWithRetry(phone, msg);
 }
 
 async function sendApprovedNotification(phone, ticketNo) {
