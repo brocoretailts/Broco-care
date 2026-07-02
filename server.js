@@ -474,18 +474,30 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
-     const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+
+    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
     var waOk = 0;
+    var totalPhones = 0;
+    var debug = '';
     if (ticket) {
       var phones = await getManagementPhones();
+      totalPhones = phones.length;
+      debug = 'phones=[' + phones.join(',') + '] ';
       if (phones.length) {
         waOk = await wa.sendToMany(phones, wa.sendApprovalNotification, ticket.ticket_no, ticket.customer_name);
+        debug += 'sendToMany returned ' + waOk;
+      } else {
+        debug += 'NO MANAGEMENT PHONES FOUND';
       }
+    } else {
+      debug = 'TICKET NOT FOUND';
     }
-    res.redirect(`/admin/tickets/${req.params.id}?wa=${waOk}&wp=${phones?phones.length:0}`);
+    var waStatus = wa.getStatus();
+    debug += ' | WA connected=' + waStatus.connected + ' ready=' + waStatus.qrAvailable;
+    res.send('<html><body style="font-family:sans-serif;padding:40px"><h3>Follow-up Result</h3><p>Ticket: <b>' + curTicket.ticket_no + '</b></p><p>WA: <b>' + waOk + '/' + totalPhones + '</b> terkirim</p><pre style="background:#f5f5f5;padding:10px;font-size:13px">' + debug + '</pre><br><a href="/admin/tickets/' + req.params.id + '">Kembali ke ticket</a></body></html>');
   } catch (e) {
     console.error('Followup error:', e.stack || e.message);
-    res.redirect(`/admin/tickets/${req.params.id}?error=followup_failed`);
+    res.send('<html><body style="font-family:sans-serif;padding:40px"><h3>FOLLOW-UP ERROR</h3><pre style="background:#fff0f0;padding:10px">' + (e.stack || e.message) + '</pre><br><a href="/admin/tickets/' + req.params.id + '">Kembali ke ticket</a></body></html>');
   }
 });
 
