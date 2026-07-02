@@ -54,8 +54,9 @@ async function saveAuthToTurso() {
       var fp = path.join(SESSION_DIR, f);
       var stat = fs.statSync(fp);
       if (stat.isFile() && stat.size < 500000) {
-        var content = fs.readFileSync(fp, 'utf-8');
-        await t.execute("INSERT OR REPLACE INTO wa_auth (key, value) VALUES (?, ?)", [f, content]);
+        var buf = fs.readFileSync(fp);
+        var b64 = buf.toString('base64');
+        await t.execute("INSERT OR REPLACE INTO wa_auth (key, value) VALUES (?, ?)", [f, b64]);
       }
     }
   } catch (e) {
@@ -67,11 +68,12 @@ async function loadAuthFromTurso() {
   var t = getTurso();
   if (!t) return false;
   try {
-    var rows = await t.execute("SELECT key, value FROM wa_auth");
+    var rows = await t.execute("SELECT key, value FROM wa_auth WHERE key NOT LIKE '%tz_fix%' AND key NOT LIKE '_migrations'");
     if (!rows || !rows.rows || !rows.rows.length) return false;
     if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
     for (var row of rows.rows) {
-      fs.writeFileSync(path.join(SESSION_DIR, row.key), row.value, 'utf-8');
+      var buf = Buffer.from(row.value, 'base64');
+      fs.writeFileSync(path.join(SESSION_DIR, row.key), buf);
     }
     console.log('Restored WA auth from Turso (' + rows.rows.length + ' files)');
     return true;
