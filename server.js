@@ -44,6 +44,10 @@ async function saveUploadedFile(file) {
   return filename;
 }
 
+process.on('unhandledRejection', function(reason) {
+  console.error('UNHANDLED REJECTION:', reason instanceof Error ? reason.message : reason);
+});
+
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(session({
