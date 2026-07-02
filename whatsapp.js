@@ -29,7 +29,8 @@ function init() {
       authStrategy: new LocalAuth(),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        protocolTimeout: 180000
       }
     });
 
@@ -80,8 +81,10 @@ function init() {
 function startKeepalive() {
   stopKeepalive();
   keepaliveTimer = setInterval(function() {
-    if (client && ready) {
-      client.pupPage && client.pupPage.evaluate(function() { return 1; }).catch(function() {});
+    if (client && ready && client.pupPage) {
+      client.pupPage.evaluate(function() { return 1; }).catch(function(err) {
+        console.log('WA keepalive ping error:', err.message);
+      });
     }
   }, KEEPALIVE_INTERVAL);
 }
