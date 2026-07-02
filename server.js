@@ -470,7 +470,7 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
   const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
   if (ticket) {
     var phones = await getManagementPhones();
-    for (const p of phones) wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
+    for (const p of phones) wa.sendFollowUpApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
   }
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
@@ -1259,19 +1259,66 @@ app.post('/teknisi/visit/:ticketId', isAuthenticated, isTeknisi, upload.fields([
     );
   }
 
-  await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
-  if (body.solusi === 'Tidak Bisa Diperbaiki' || body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)') {
-    await run("UPDATE tickets SET follow_up_count = follow_up_count + 1 WHERE id = ?", [req.params.ticketId]);
-    var descMap = {'Butuh Sparepart (Follow-up)': 'Kunjungan: butuh sparepart, follow-up diperlukan', 'Ganti Baru (Follow-up)': 'Kunjungan: butuh unit baru, follow-up diperlukan'};
+  // FIX: Check if this is a follow-up case
+  if (body.solusi === 'Butuh Sparepart (Follow-up)' || body.solusi === 'Ganti Baru (Follow-up)') {
+    // Get current follow-up count
+    const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
+    const newCount = (currentFollowUp && currentFollowUp.follow_up_count || 0) + 1;
+    
+    // UPDATE: Change status to 'approval' for follow-up cases
+    await run("UPDATE tickets SET follow_up_count = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", 
+      [newCount, req.params.ticketId]);
+    
+    var descMap = {
+      'Butuh Sparepart (Follow-up)': 'Kunjungan: butuh sparepart, follow-up diperlukan', 
+      'Ganti Baru (Follow-up)': 'Kunjungan: butuh unit baru, follow-up diperlukan'
+    };
     var desc = descMap[body.solusi] || 'Kunjungan: masalah belum selesai, butuh follow-up';
+    
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.ticketId, req.session.user.id, 'follow_up', desc]);
+    
     var adminIds = await getAdminIds();
     for (const uid of adminIds) {
       await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
         [uid, 'Kunjungan teknisi: masalah belum selesai, butuh follow-up dari Management', `/admin/tickets/${req.params.ticketId}`]);
     }
+    
+    // FIX: Send WhatsApp notification for follow-up approval
+    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
+    if (ticket) {
+      var mgmtPhones = await getManagementPhones();
+      for (const p of mgmtPhones) {
+        wa.sendFollowUpApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
+      }
+    }
+  } else if (body.solusi === 'Tidak Bisa Diperbaiki') {
+    // Handle "Tidak Bisa Diperbaiki" case - also needs follow-up approval
+    const currentFollowUp = await queryOne("SELECT follow_up_count FROM tickets WHERE id = ?", [req.params.ticketId]);
+    const newCount = (currentFollowUp && currentFollowUp.follow_up_count || 0) + 1;
+    
+    await run("UPDATE tickets SET follow_up_count = ?, status = 'approval', updated_at = datetime('now','localtime') WHERE id = ?", 
+      [newCount, req.params.ticketId]);
+    
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.ticketId, req.session.user.id, 'follow_up', 'Kunjungan: tidak bisa diperbaiki, follow-up dari management diperlukan']);
+    
+    var adminIds = await getAdminIds();
+    for (const uid of adminIds) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        [uid, 'Kunjungan teknisi: tidak bisa diperbaiki, butuh follow-up dari Management', `/admin/tickets/${req.params.ticketId}`]);
+    }
+    
+    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.ticketId]);
+    if (ticket) {
+      var mgmtPhones = await getManagementPhones();
+      for (const p of mgmtPhones) {
+        wa.sendFollowUpApprovalNotification(p, ticket.ticket_no, ticket.customer_name);
+      }
+    }
   } else {
+    // Normal case - visit completed successfully
+    await run("UPDATE tickets SET status = 'on_progress', updated_at = datetime('now','localtime') WHERE id = ?", [req.params.ticketId]);
     await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
       [req.params.ticketId, req.session.user.id, 'visit', 'Kunjungan dilakukan']);
     var adminIds = await getAdminIds();
@@ -1398,7 +1445,7 @@ app.use(function(req, res) {
   if (req.xhr || req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
   }
-  res.status(404).send('<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>404 - Halaman Tidak Ditemukan</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f5f5f5}.card{text-align:center;padding:40px;background:white;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}h1{color:#dc3545;font-size:48px;margin:0 0 10px}p{color:#666;margin:0 0 20px}a{color:#0d6efd;text-decoration:none}</style></head><body><div class=\"card\"><h1>404</h1><p>Halaman tidak ditemukan</p><a href=\"/\">Kembali ke Beranda</a></div></body></html>');
+  res.status(404).send('<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>404 - Halaman Tidak Ditemukan</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5}.container{text-align:center;background:white;padding:40px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}.container h1{color:#333;margin:0 0 10px 0}.container p{color:#666;margin:0}a{color:#007bff;text-decoration:none}</style></head><body><div class=\"container\"><h1>404</h1><p>Halaman tidak ditemukan</p><a href=\"/\">Kembali ke halaman utama</a></div></body></html>');
 });
 
 app.listen(PORT, '0.0.0.0', () => {});
