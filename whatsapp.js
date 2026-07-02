@@ -68,17 +68,38 @@ async function loadAuthFromTurso() {
   var t = getTurso();
   if (!t) return false;
   try {
-    var rows = await t.execute("SELECT key, value FROM wa_auth WHERE key NOT LIKE '%tz_fix%' AND key NOT LIKE '_migrations'");
+    var rows = await t.execute("SELECT key, value FROM wa_auth");
     if (!rows || !rows.rows || !rows.rows.length) return false;
     if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    var validCount = 0;
     for (var row of rows.rows) {
+      if (row.key.startsWith('_')) continue; // skip internal
+      // validate base64 (ignore old utf-8 data)
       var buf = Buffer.from(row.value, 'base64');
+      if (!buf || buf.length < 10) {
+        console.log('WA auth skip invalid entry:', row.key);
+        continue;
+      }
+      // verify it looks like valid JSON or Baileys key material
+      var reEncoded = buf.toString('base64');
+      if (reEncoded !== row.value) {
+        console.log('WA auth skip non-base64 entry:', row.key);
+        continue;
+      }
       fs.writeFileSync(path.join(SESSION_DIR, row.key), buf);
+      validCount++;
     }
-    console.log('Restored WA auth from Turso (' + rows.rows.length + ' files)');
+    if (!validCount) {
+      console.log('WA auth: no valid entries found, clearing all');
+      await t.execute("DELETE FROM wa_auth", []);
+      return false;
+    }
+    console.log('Restored WA auth from Turso (' + validCount + ' files)');
     return true;
   } catch (e) {
     console.error('loadAuthFromTurso error:', e.message);
+    // If error, clear all to force fresh auth
+    try { await t.execute("DELETE FROM wa_auth", []); } catch (e2) {}
     return false;
   }
 }
@@ -92,9 +113,14 @@ async function init() {
     lastQr = null;
     try {
       await ensureAuthTable();
-      if (!fs.existsSync(SESSION_DIR) || !fs.readdirSync(SESSION_DIR).length) {
-        await loadAuthFromTurso();
+      // Always wipe and reload from Turso to ensure clean state
+      if (fs.existsSync(SESSION_DIR)) {
+        var old = fs.readdirSync(SESSION_DIR);
+        for (var f of old) fs.unlinkSync(path.join(SESSION_DIR, f));
+        fs.rmdirSync(SESSION_DIR);
       }
+      var loaded = await loadAuthFromTurso();
+      if (loaded) console.log('WA auth restored from Turso, no QR scan needed');
       const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
       const { version } = await fetchLatestBaileysVersion();
       sock = makeWASocket({
