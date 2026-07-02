@@ -438,6 +438,8 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
 
   res.render('admin/ticket-detail', {
     ticket, schedule, visit, logs, teknisi,
+    wa_failed: req.query.wa_failed,
+    error: req.query.error,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });

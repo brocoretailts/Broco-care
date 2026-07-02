@@ -3,6 +3,14 @@
 <div class="d-flex">
   <%- include('../partials/sidebar') %>
   <main class="main-content">
+    <% if (typeof wa_failed !== 'undefined' && wa_failed === '1') { %>
+      <div class="alert alert-danger py-2 mb-2">WA APPROVAL GAGAL — management tidak menerima WA. Cek koneksi WA.</div>
+    <% } else if (typeof wa_failed !== 'undefined' && wa_failed === 'ok') { %>
+      <div class="alert alert-success py-2 mb-2">WA APPROVAL terkirim ke management.</div>
+    <% } %>
+    <% if (typeof error !== 'undefined' && error === 'followup_failed') { %>
+      <div class="alert alert-danger py-2 mb-2">ERROR follow-up — ada masalah teknis. Cek server log.</div>
+    <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
       <div>

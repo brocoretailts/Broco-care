@@ -64,6 +64,27 @@
     </div>
 
     <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-white fw-semibold">Test Kirim WA</div>
+      <div class="card-body">
+        <form onsubmit="testWa(); return false;" class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small">Nomor HP</label>
+            <input type="text" id="testPhone" class="form-control" placeholder="0812xxx" value="">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Ticket No (opsional)</label>
+            <input type="text" id="testTicket" class="form-control" value="TEST-001">
+          </div>
+          <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Kirim Test WA</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('testResult').innerHTML=''">Clear</button>
+          </div>
+        </form>
+        <div id="testResult" class="mt-2 small"></div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-3">
       <div class="card-header bg-white fw-semibold">Log Notifikasi WhatsApp</div>
       <div class="card-body">
         <p class="small text-secondary mb-2">Notifikasi WhatsApp terkirim secara otomatis saat:</p>
@@ -116,6 +137,28 @@ function refreshQR() {
     checkStatus();
   }).catch(function() {
     container.innerHTML = '<div class="text-danger py-5"><p>Gagal memuat QR</p></div>';
+  });
+}
+
+function testWa() {
+  var phone = document.getElementById('testPhone').value.trim();
+  var ticket = document.getElementById('testTicket').value.trim();
+  var result = document.getElementById('testResult');
+  if (!phone) { result.innerHTML = '<span class="text-danger">Nomor HP harus diisi</span>'; return; }
+  result.innerHTML = '<span class="text-secondary">Mengirim...</span>';
+  fetch('/api/wa/test-send',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-csrf-token':csrfToken},
+    body:JSON.stringify({phone:phone,ticket_no:ticket||'TEST-001',customer:'Test Customer'})
+  }).then(function(r){return r.json()}).then(function(data){
+    if (data.ok) {
+      result.innerHTML = '<span class="text-success fw-semibold"><i class="bi bi-check-circle"></i> WA BERHASIL dikirim ke ' + phone + '</span>';
+      checkStatus();
+    } else {
+      result.innerHTML = '<span class="text-danger fw-semibold"><i class="bi bi-x-circle"></i> WA GAGAL</span><pre class="mt-1 text-secondary" style="font-size:11px">' + JSON.stringify(data,null,2) + '</pre>';
+    }
+  }).catch(function(err){
+    result.innerHTML = '<span class="text-danger fw-semibold"><i class="bi bi-x-circle"></i> Error: ' + err.message + '</span>';
   });
 }
 
