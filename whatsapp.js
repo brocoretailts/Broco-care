@@ -13,7 +13,7 @@ let initPromise = null;
 let reconnectTimer = null;
 
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 8000;
+const RETRY_DELAY = 10000;
 const RECONNECT_DELAY = 10000;
 const MAX_FAILED_MSGS = 50;
 
@@ -27,8 +27,25 @@ function init() {
       authStrategy: new LocalAuth(),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-extensions', '--disable-software-rasterizer'],
-        protocolTimeout: 180000
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-extensions',
+          '--disable-software-rasterizer',
+          '--single-process',
+          '--disable-background-networking',
+          '--disable-sync',
+          '--mute-audio',
+          '--no-first-run',
+          '--disable-notifications',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI,BlinkGenPropertyTrees,site-per-process,Translate',
+          '--js-flags=--max-heap-size=256 --max-old-space-size=256'
+        ],
+        protocolTimeout: 600000
       }
     });
 
@@ -132,8 +149,14 @@ async function sendWaMessage(phone, message) {
     }
     return !!sent;
   } catch (e) {
-    console.error('WA send error:', e.message);
-    addFailed(phone, message, e.message);
+    var errMsg = e.message || String(e);
+    console.error('WA send error:', errMsg);
+    addFailed(phone, message, errMsg);
+    if (errMsg.includes('timed out') || errMsg.includes('Timeout') || errMsg.includes('Protocol error')) {
+      console.log('WA timeout detected — triggering reconnect...');
+      ready = false;
+      scheduleReconnect();
+    }
     return false;
   }
 }
