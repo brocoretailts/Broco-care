@@ -469,15 +469,13 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
     [req.params.id, req.session.user.id, 'followup_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket: ' + ticket.ticket_no + ' membutuhkan re-approval', '/management/approval']);
-  var phones = await getManagementPhones();
-  var waOk = true;
-  for (const p of phones) {
-    var sent = await wa.sendApprovalNotification(p, ticket.ticket_no, ticket.customer_name + ' (Follow-up)');
-    if (!sent) waOk = false;
+  var ticket2 = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+  if (ticket2) {
+    var phones = await getManagementPhones();
+    for (const p of phones) wa.sendApprovalNotification(p, ticket2.ticket_no, ticket2.customer_name);
   }
-  var redirectUrl = `/admin/tickets/${req.params.id}`;
-  if (!waOk) redirectUrl += '?wa_failed=1';
-  res.redirect(redirectUrl);
+  res.redirect(`/admin/tickets/${req.params.id}`);
+});
 });
 
 app.post('/admin/tickets/:id/schedule', isAuthenticated, isAdmin, async (req, res) => {
