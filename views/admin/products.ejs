@@ -4,8 +4,18 @@
   <main class="main-content">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="fw-bold mb-0"><i class="bi bi-box me-2"></i>Master Produk</h4>
-      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal"><i class="bi bi-plus"></i> Tambah Produk</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal"><i class="bi bi-upload"></i> Import Excel</button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal"><i class="bi bi-plus"></i> Tambah Produk</button>
+      </div>
     </div>
+
+    <% if (typeof import_ok !== 'undefined') { %>
+      <div class="alert alert-success py-2"><i class="bi bi-check-circle"></i> Import selesai: <strong><%= import_ok %></strong> produk diimport<%= typeof import_skip !== 'undefined' && import_skip > 0 ? ' (' + import_skip + ' dilewati)' : '' %>.</div>
+    <% } %>
+    <% if (typeof import_error !== 'undefined') { %>
+      <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> Import gagal: <%= import_error %></div>
+    <% } %>
 
     <div class="card border-0 shadow-sm">
       <div class="table-responsive">
@@ -77,6 +87,29 @@
       </div>
     </div>
     <% }) %>
+
+    <div class="modal fade" id="importModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="POST" action="/admin/products/import" enctype="multipart/form-data">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <div class="modal-header"><h5 class="modal-title">Import Produk dari Excel</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <p class="small text-secondary">Upload file Excel (.xlsx, .xls) dengan kolom: <strong>Kode Barang</strong>, <strong>Nama Produk</strong>, <strong>Tipe</strong>, <strong>Garansi</strong>.</p>
+              <div class="mb-2">
+                <input type="file" name="excel" class="form-control" accept=".xlsx,.xls" required>
+              </div>
+              <p class="small text-secondary mb-0">Produk dengan Kode Barang yang sudah ada akan diupdate.</p>
+            </div>
+            <div class="modal-footer">
+              <a href="/sample-product.xlsx" class="btn btn-outline-secondary btn-sm" download>Download Template</a>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+              <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> Import</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 <%- include('../partials/footer') %>

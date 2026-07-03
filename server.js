@@ -676,6 +676,9 @@ app.get('/admin/products', isAuthenticated, isAdmin, async (req, res) => {
   const products = await queryAll("SELECT * FROM products ORDER BY nama_produk");
   res.render('admin/products', {
     products,
+    import_ok: req.query.import_ok,
+    import_skip: req.query.import_skip,
+    import_error: req.query.import_error,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });
@@ -700,6 +703,40 @@ app.post('/admin/products/:id/edit', isAuthenticated, isAdmin, async (req, res) 
 app.post('/admin/products/:id/delete', isAuthenticated, isAdmin, async (req, res) => {
   await run("DELETE FROM products WHERE id = ?", [req.params.id]);
   res.redirect('/admin/products');
+});
+
+app.post('/admin/products/import', isAuthenticated, isAdmin, upload.single('excel'), async (req, res) => {
+  if (!req.file) return res.redirect('/admin/products?import_error=no_file');
+  try {
+    const XLSX = require('xlsx');
+    var wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    var imported = 0, skipped = 0, errors = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var kode = (r['Kode Barang'] || r['kode_barang'] || r['KODE_BARANG'] || '').toString().trim();
+      var nama = (r['Nama Produk'] || r['nama_produk'] || r['NAMA_PRODUK'] || '').toString().trim();
+      var tipe = (r['Tipe'] || r['tipe'] || r['TIPE'] || '').toString().trim();
+      var garansi = parseInt(r['Garansi'] || r['garansi'] || r['garansi_bulan'] || 0) || 0;
+      if (!kode || !nama) { skipped++; continue; }
+      try {
+        var exist = await queryOne("SELECT id FROM products WHERE kode_barang = ?", [kode]);
+        if (exist) {
+          await run("UPDATE products SET nama_produk = ?, tipe = ?, garansi_bulan = ? WHERE kode_barang = ?", [nama, tipe, garansi, kode]);
+        } else {
+          await run("INSERT INTO products (kode_barang, nama_produk, tipe, garansi_bulan) VALUES (?, ?, ?, ?)", [kode, nama, tipe, garansi]);
+        }
+        imported++;
+      } catch (e) {
+        errors.push('Baris ' + (i + 2) + ': ' + e.message);
+      }
+    }
+    res.redirect('/admin/products?import_ok=' + imported + '&import_skip=' + skipped);
+  } catch (e) {
+    console.error('Import Excel error:', e.message);
+    res.redirect('/admin/products?import_error=' + encodeURIComponent(e.message));
+  }
 });
 
 app.get('/admin/teknisi', isAuthenticated, isAdmin, async (req, res) => {
