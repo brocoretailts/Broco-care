@@ -12,6 +12,20 @@ function isAdmin(req, res, next) {
   res.redirect('/dashboard');
 }
 
+function isCS(req, res, next) {
+  if (req.session && req.session.user && req.session.user.role === 'cs') {
+    return next();
+  }
+  res.redirect('/dashboard');
+}
+
+function isAdminOrCS(req, res, next) {
+  if (req.session && req.session.user && (req.session.user.role === 'admin' || req.session.user.role === 'cs')) {
+    return next();
+  }
+  res.redirect('/dashboard');
+}
+
 function isManagement(req, res, next) {
   if (req.session && req.session.user && req.session.user.role === 'management') {
     return next();
@@ -33,4 +47,4 @@ function redirectIfAuthenticated(req, res, next) {
   next();
 }
 
-module.exports = { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated };
+module.exports = { isAuthenticated, isAdmin, isCS, isAdminOrCS, isManagement, isTeknisi, redirectIfAuthenticated };

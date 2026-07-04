@@ -9,8 +9,8 @@
   <div class="sidebar-user px-3 py-2 border-bottom">
     <small class="text-secondary">Logged in as</small>
     <div class="fw-semibold"><%= user.name %></div>
-    <span class="badge bg-<%= user.role === 'admin' ? 'primary' : user.role === 'management' ? 'warning' : 'info' %>">
-      <%= user.role.charAt(0).toUpperCase() + user.role.slice(1) %>
+    <span class="badge bg-<%= user.role === 'admin' ? 'primary' : user.role === 'management' ? 'warning' : user.role === 'cs' ? 'secondary' : 'info' %>">
+      <%= user.role === 'cs' ? 'CS' : user.role.charAt(0).toUpperCase() + user.role.slice(1) %>
     </span>
   </div>
   <div class="sidebar-menu">
@@ -65,6 +65,20 @@
       </a>
       <a href="/teknisi/history" class="sidebar-link <%= path.includes('history') ? 'active' : '' %>">
         <i class="bi bi-clock-history me-2"></i> Riwayat
+      </a>
+    <% } else if (user.role === 'cs') { %>
+      <a href="/cs/dashboard" class="sidebar-link <%= path.includes('dashboard') ? 'active' : '' %>">
+        <i class="bi bi-speedometer2 me-2"></i> Dashboard
+      </a>
+      <a href="/admin/tickets/create" class="sidebar-link <%= path.includes('create') ? 'active' : '' %>">
+        <i class="bi bi-plus-circle me-2"></i> Buat Ticket
+      </a>
+      <a href="/cs/tickets" class="sidebar-link <%= path.includes('cs/tickets') ? 'active' : '' %>">
+        <i class="bi bi-ticket me-2"></i> Ticket Saya
+      </a>
+      <a href="/admin/notifications" class="sidebar-link <%= path.includes('notifications') ? 'active' : '' %>">
+        <i class="bi bi-bell me-2"></i> Notifikasi
+        <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
       </a>
     <% } %>
   </div>

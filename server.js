@@ -11,7 +11,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug } = require('./database');
 const { seed } = require('./seed');
-const { isAuthenticated, isAdmin, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
+const { isAuthenticated, isAdmin, isAdminOrCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
 const cloudinary = require('./cloudinary');
 
@@ -219,6 +219,7 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
   if (role === 'admin') return res.redirect('/admin/dashboard');
   if (role === 'management') return res.redirect('/management/dashboard');
   if (role === 'teknisi') return res.redirect('/teknisi/dashboard');
+  if (role === 'cs') return res.redirect('/cs/dashboard');
   res.redirect('/login');
 });
 
@@ -326,7 +327,29 @@ app.get('/admin/dashboard', isAuthenticated, isAdmin, async (req, res) => {
   });
 });
 
-app.get('/admin/tickets/create', isAuthenticated, isAdmin, async (req, res) => {
+/* ============= CS (Customer Service) ============= */
+
+app.get('/cs/dashboard', isAuthenticated, isCS, async (req, res) => {
+  var tickets = await queryAll("SELECT id, ticket_no, customer_name, status, created_at FROM tickets WHERE created_by = ? ORDER BY created_at DESC LIMIT 20", [req.session.user.id]);
+  res.render('cs/dashboard', {
+    tickets,
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
+  });
+});
+
+app.get('/cs/tickets', isAuthenticated, isCS, async (req, res) => {
+  var tickets = await queryAll("SELECT * FROM tickets WHERE created_by = ? ORDER BY created_at DESC", [req.session.user.id]);
+  res.render('cs/tickets', {
+    tickets,
+    notifCount: await getNotifCount(req.session.user),
+    notifs: await getNotifs(req.session.user)
+  });
+});
+
+/* ============= TICKETS ============= */
+
+app.get('/admin/tickets/create', isAuthenticated, isAdminOrCS, async (req, res) => {
   const products = await queryAll("SELECT * FROM products ORDER BY nama_produk");
   const ticketNo = await generateTicketNo();
   res.render('admin/ticket-create', {
@@ -336,7 +359,7 @@ app.get('/admin/tickets/create', isAuthenticated, isAdmin, async (req, res) => {
   });
 });
 
-app.post('/admin/tickets/create', isAuthenticated, isAdmin, upload.fields([
+app.post('/admin/tickets/create', isAuthenticated, isAdminOrCS, upload.fields([
   { name: 'faktur', maxCount: 1 },
   { name: 'foto_produk', maxCount: 1 },
   { name: 'video', maxCount: 1 },
@@ -800,7 +823,7 @@ app.get('/admin/settings', isAuthenticated, isAdmin, async (req, res) => {
         try { return sum + fs.statSync(path.join(uploadsPath, f)).size; } catch(e) { return sum; }
       }, 0)
     : 0;
-  const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management','teknisi') ORDER BY role, name");
+  const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management','teknisi','cs') ORDER BY role, name");
   res.render('admin/settings', {
     dbPath, dbSize, uploadsSize, uploadsDir, admins,
     user: req.session.user,
@@ -836,7 +859,7 @@ app.post('/admin/settings/profile', isAuthenticated, async (req, res) => {
 app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, res) => {
   const { name, username, password, role, phone, email } = req.body;
   if (!name || !username || !password || !role) return res.redirect('/admin/settings?error=missing_fields');
-  if (!['admin','management','teknisi'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
+  if (!['admin','management','teknisi','cs'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
   try {
     const hash = bcrypt.hashSync(password, 10);
     await runWithResults(
@@ -851,7 +874,7 @@ app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, re
 
 app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) => {
   const { name, phone, email, username, role } = req.body;
-  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ?, role = ? WHERE id = ? AND role IN ('admin','management','teknisi')",
+  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ?, role = ? WHERE id = ? AND role IN ('admin','management','teknisi','cs')",
     [name, phone || '', email || '', username, role, req.params.id]);
   if (req.body.password) {
     const hash = bcrypt.hashSync(req.body.password, 10);
@@ -863,7 +886,7 @@ app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) 
 app.post('/admin/settings/user/:id/delete', isAuthenticated, isAdmin, async (req, res) => {
   var user = await queryOne("SELECT role FROM users WHERE id = ?", [req.params.id]);
   if (!user) return res.redirect('/admin/settings?error=user_not_found');
-  if (user.role !== 'admin' && user.role !== 'management' && user.role !== 'teknisi') return res.redirect('/admin/settings?error=invalid_role');
+  if (user.role !== 'admin' && user.role !== 'management' && user.role !== 'teknisi' && user.role !== 'cs') return res.redirect('/admin/settings?error=invalid_role');
   var adminCount = await queryOne("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
   if (user.role === 'admin' && adminCount.count <= 1) return res.redirect('/admin/settings?error=cannot_delete_last_admin');
   await run("DELETE FROM users WHERE id = ?", [req.params.id]);
@@ -1094,7 +1117,7 @@ app.post('/admin/settings/reset-total', isAuthenticated, isAdmin, validateCsrf, 
   res.redirect('/admin/settings?success=reset_total');
 });
 
-app.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {
+app.get('/admin/notifications', isAuthenticated, isAdminOrCS, async (req, res) => {
   await run("DELETE FROM notifications WHERE is_read = 1 AND created_at < datetime('now','-3 days')");
   const notifs = await queryAll(
     "SELECT * FROM notifications WHERE (user_id = ? OR role = ?) ORDER BY is_read ASC, created_at DESC LIMIT 50",
