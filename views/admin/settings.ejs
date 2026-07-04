@@ -84,7 +84,7 @@
                 <tr>
                   <td class="fw-semibold"><%= a.username %></td>
                   <td><%= a.name %></td>
-                  <td><span class="badge bg-<%= a.role === 'admin' ? 'primary' : 'warning' %>"><%= a.role.charAt(0).toUpperCase() + a.role.slice(1) %></span></td>
+                  <td><span class="badge bg-<%= a.role === 'admin' ? 'primary' : a.role === 'management' ? 'warning' : 'info' %>"><%= a.role.charAt(0).toUpperCase() + a.role.slice(1) %></span></td>
                   <td><%= a.phone || '-' %></td>
                   <td><%= a.email || '-' %></td>
                   <td><button class="btn btn-sm btn-outline-primary" onclick="editUser(<%= a.id %>, '<%= a.name.replace(/'/g,"\\'") %>', '<%= a.username %>', '<%= a.role %>', '<%= (a.phone||'').replace(/'/g,"\\'") %>', '<%= (a.email||'').replace(/'/g,"\\'") %>')" data-bs-toggle="modal" data-bs-target="#editUserModal"><i class="bi bi-pencil"></i></button>
@@ -214,6 +214,7 @@
           <select name="role" class="form-select">
             <option value="admin">Admin</option>
             <option value="management">Management</option>
+            <option value="teknisi">Teknisi</option>
           </select>
         </div>
         <div class="mb-2"><label class="form-label small">No. HP (untuk WA)</label><input name="phone" class="form-control" placeholder="08123456789"></div>

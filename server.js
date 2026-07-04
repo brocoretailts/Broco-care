@@ -800,7 +800,7 @@ app.get('/admin/settings', isAuthenticated, isAdmin, async (req, res) => {
         try { return sum + fs.statSync(path.join(uploadsPath, f)).size; } catch(e) { return sum; }
       }, 0)
     : 0;
-  const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management') ORDER BY role, name");
+  const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management','teknisi') ORDER BY role, name");
   res.render('admin/settings', {
     dbPath, dbSize, uploadsSize, uploadsDir, admins,
     user: req.session.user,
@@ -836,7 +836,7 @@ app.post('/admin/settings/profile', isAuthenticated, async (req, res) => {
 app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, res) => {
   const { name, username, password, role, phone, email } = req.body;
   if (!name || !username || !password || !role) return res.redirect('/admin/settings?error=missing_fields');
-  if (!['admin','management'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
+  if (!['admin','management','teknisi'].includes(role)) return res.redirect('/admin/settings?error=invalid_role');
   try {
     const hash = bcrypt.hashSync(password, 10);
     await runWithResults(
@@ -851,7 +851,7 @@ app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, re
 
 app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) => {
   const { name, phone, email, username, role } = req.body;
-  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ?, role = ? WHERE id = ? AND role IN ('admin','management')",
+  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ?, role = ? WHERE id = ? AND role IN ('admin','management','teknisi')",
     [name, phone || '', email || '', username, role, req.params.id]);
   if (req.body.password) {
     const hash = bcrypt.hashSync(req.body.password, 10);
@@ -863,7 +863,7 @@ app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) 
 app.post('/admin/settings/user/:id/delete', isAuthenticated, isAdmin, async (req, res) => {
   var user = await queryOne("SELECT role FROM users WHERE id = ?", [req.params.id]);
   if (!user) return res.redirect('/admin/settings?error=user_not_found');
-  if (user.role !== 'admin' && user.role !== 'management') return res.redirect('/admin/settings?error=invalid_role');
+  if (user.role !== 'admin' && user.role !== 'management' && user.role !== 'teknisi') return res.redirect('/admin/settings?error=invalid_role');
   var adminCount = await queryOne("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
   if (user.role === 'admin' && adminCount.count <= 1) return res.redirect('/admin/settings?error=cannot_delete_last_admin');
   await run("DELETE FROM users WHERE id = ?", [req.params.id]);
