@@ -850,14 +850,24 @@ app.post('/admin/settings/user/create', isAuthenticated, isAdmin, async (req, re
 });
 
 app.post('/admin/settings/user/:id', isAuthenticated, isAdmin, async (req, res) => {
-  const { name, phone, email, username } = req.body;
-  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ? WHERE id = ? AND role IN ('admin','management')",
-    [name, phone || '', email || '', username, req.params.id]);
+  const { name, phone, email, username, role } = req.body;
+  await run("UPDATE users SET name = ?, phone = ?, email = ?, username = ?, role = ? WHERE id = ? AND role IN ('admin','management')",
+    [name, phone || '', email || '', username, role, req.params.id]);
   if (req.body.password) {
     const hash = bcrypt.hashSync(req.body.password, 10);
     await run("UPDATE users SET password = ? WHERE id = ?", [hash, req.params.id]);
   }
   res.redirect('/admin/settings?success=user_updated');
+});
+
+app.post('/admin/settings/user/:id/delete', isAuthenticated, isAdmin, async (req, res) => {
+  var user = await queryOne("SELECT role FROM users WHERE id = ?", [req.params.id]);
+  if (!user) return res.redirect('/admin/settings?error=user_not_found');
+  if (user.role !== 'admin' && user.role !== 'management') return res.redirect('/admin/settings?error=invalid_role');
+  var adminCount = await queryOne("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
+  if (user.role === 'admin' && adminCount.count <= 1) return res.redirect('/admin/settings?error=cannot_delete_last_admin');
+  await run("DELETE FROM users WHERE id = ?", [req.params.id]);
+  res.redirect('/admin/settings?success=user_deleted');
 });
 
 app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => {
