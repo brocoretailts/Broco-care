@@ -11,12 +11,10 @@
     "seed": "node seed.js"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "archiver": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.11.1",
-    "cloudinary": "^2.10.0",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
     "express": "^4.21.2",

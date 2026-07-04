@@ -4,8 +4,6 @@ const fs = require('fs');
 
 const DB_PATH = path.join(__dirname, 'database.sqlite');
 let db = null;
-let turso = null;
-let isTurso = false;
 
 function rowsToObjects(rows, columns) {
   if (!rows || !columns) return [];
@@ -78,124 +76,20 @@ function createTablesLocal() {
   )`);
 }
 
-const TURSO_TABLE_SQL = [
-  `CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL,
-    phone TEXT, email TEXT, active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, kode_barang TEXT UNIQUE NOT NULL,
-    nama_produk TEXT NOT NULL, tipe TEXT, garansi_bulan INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS tickets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_no TEXT UNIQUE NOT NULL,
-    created_by INTEGER, product_id INTEGER, kode_barang TEXT,
-    tanggal_complaint TEXT, customer_name TEXT, customer_alamat TEXT,
-    customer_hp TEXT, customer_email TEXT, customer_kota TEXT,
-    customer_provinsi TEXT, tanggal_pembelian TEXT, toko TEXT,
-    marketplace TEXT, nomor_invoice TEXT, faktur_path TEXT,
-    serial_number TEXT, keluhan TEXT, foto_produk_path TEXT,
-    video_path TEXT, foto_kerusakan_path TEXT,
-    status TEXT DEFAULT 'waiting', admin_analysis TEXT,
-    management_decision TEXT, management_comment TEXT,
-    approved_by INTEGER, approved_at TEXT, closed_by INTEGER,
-    closed_at TEXT, follow_up_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now','localtime')),
-    updated_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS schedules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL,
-    teknisi_id INTEGER NOT NULL, tanggal TEXT, jam TEXT, notes TEXT,
-    created_by INTEGER, created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS visit_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL,
-    teknisi_id INTEGER NOT NULL, tanggal TEXT, jam TEXT,
-    hasil_pemeriksaan TEXT, solusi TEXT,
-    foto_sebelum_path TEXT, foto_sesudah_path TEXT, video_path TEXT,
-    sparepart TEXT, tanggal_selesai TEXT,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, role TEXT,
-    message TEXT NOT NULL, link TEXT, related_id INTEGER,
-    is_read INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS activity_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER, user_id INTEGER,
-    action TEXT NOT NULL, description TEXT,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`,
-  `CREATE TABLE IF NOT EXISTS debug_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL,
-    message TEXT NOT NULL, detail TEXT,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-  )`
-];
-
-async function ensureTursoTables() {
-  if (!turso) return;
-  // Turso server uses UTC, so 'localtime' would be wrong. Use fixed +7 hours instead.
-  for (const sql of TURSO_TABLE_SQL) {
-    var fixed = sql.replace(/'now','localtime'/g, "'now','+7 hours'");
-    await turso.execute({ sql: fixed, args: [] });
-  }
-  // Migration: fix existing UTC timestamps → WIB (+7h) — only runs once
-  try {
-    await turso.execute({ sql: "CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY, value TEXT)", args: [] });
-    var m = await turso.execute({ sql: "SELECT value FROM _migrations WHERE key = 'tz_fix'", args: [] });
-    if (!m || !m.rows || !m.rows.length) {
-      await turso.execute({ sql: "UPDATE notifications SET created_at = datetime(created_at, '+7 hours')", args: [] });
-      await turso.execute({ sql: "UPDATE activity_log SET created_at = datetime(created_at, '+7 hours')", args: [] });
-      await turso.execute({ sql: "UPDATE tickets SET created_at = datetime(created_at, '+7 hours'), updated_at = datetime(updated_at, '+7 hours')", args: [] });
-      await turso.execute({ sql: "INSERT INTO _migrations (key, value) VALUES ('tz_fix', '1')", args: [] });
-      console.log('Timezone migration: all timestamps shifted +7 hours');
-    }
-  } catch (e) { console.error('Timezone migration error:', e.message); }
-  
-  // Trigger untuk set created_at = WIB setiap INSERT (karena DEFAULT datetime('now','localtime') di Turso = UTC)
-  var triggerTables = ['notifications', 'activity_log', 'debug_logs', 'tickets', 'schedules', 'visit_results', 'users', 'products'];
-  for (var tbl of triggerTables) {
-    try {
-      await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_" + tbl + "_wib AFTER INSERT ON " + tbl + " BEGIN UPDATE " + tbl + " SET created_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] });
-    } catch (e) { /* ignore */ }
-  }
-  try { await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_tickets_wib_upd AFTER INSERT ON tickets BEGIN UPDATE tickets SET updated_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] }); } catch (e) { /* ignore */ }
-  try { await turso.execute({ sql: "CREATE TRIGGER IF NOT EXISTS trg_debug_logs_wib AFTER INSERT ON debug_logs BEGIN UPDATE debug_logs SET created_at = datetime('now', '+7 hours') WHERE id = NEW.id; END", args: [] }); } catch (e) { /* ignore */ }
-}
 
 function initDB() {
   db = new Database(DB_PATH);
   db.pragma('journal_mode=WAL');
   db.pragma('foreign_keys=ON');
-
-  isTurso = !!(process.env.TURSO_DB_URL);
-  if (isTurso) {
-    const { createClient } = require('@libsql/client');
-    turso = createClient({
-      url: process.env.TURSO_DB_URL,
-      authToken: process.env.TURSO_DB_TOKEN || '',
-    });
-  }
-
   createTablesLocal();
   return db;
 }
 
 async function run(sql, params = []) {
-  if (turso) {
-    turso.execute({ sql, args: params }).catch(function(e) { console.error('Turso run error:', e.message); });
-  }
   return db.prepare(sql).run(params);
 }
 
 async function runWithResults(sql, params = []) {
-  if (turso) {
-    turso.execute({ sql, args: params }).catch(function(e) { console.error('Turso runWithResults error:', e.message); });
-  }
   return db.prepare(sql).run(params);
 }
 
@@ -211,11 +105,10 @@ function getDB() { return db; }
 
 function closeDB() {
   try { if (db) { db.close(); db = null; } } catch (e) { /* ignore */ }
-  turso = null;
 }
 
 function checkpoint() {
-  if (!isTurso && db) {
+  if (db) {
     try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) { /* ignore */ }
   }
 }
@@ -258,58 +151,6 @@ class SQLiteSessionStore extends (require('express-session').Store) {
   }
 }
 
-const SYNC_TABLES = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log', 'debug_logs'];
-
-async function syncLocalToTurso() {
-  if (!turso || !db) return;
-  const rev = [...SYNC_TABLES].reverse();
-  for (const t of rev) {
-    try { await turso.execute({ sql: `DELETE FROM "${t}"`, args: [] }); } catch (e) { /* ignore */ }
-  }
-  for (const table of SYNC_TABLES) {
-    const rows = db.prepare(`SELECT * FROM "${table}"`).all();
-    if (rows.length === 0) continue;
-    const cols = Object.keys(rows[0]);
-    const ph = cols.map(() => '?').join(',');
-    const qn = cols.map(c => `"${c}"`).join(',');
-    for (const row of rows) {
-      try {
-        await turso.execute({ sql: `INSERT INTO "${table}" (${qn}) VALUES (${ph})`, args: cols.map(c => row[c]) });
-      } catch (e) {
-        console.error(`Turso sync error [${table}]:`, e.message);
-      }
-    }
-  }
-}
-
-async function exportTursoToLocal() {
-  if (!turso || !db) return;
-  const tables = ['users', 'products', 'tickets', 'schedules', 'visit_results', 'notifications', 'activity_log'];
-  try { db.exec("ROLLBACK"); } catch (e) { /* clear hanging tx from prev error */ }
-  try {
-    db.exec("BEGIN");
-    for (const t of tables) {
-      db.exec(`DELETE FROM "${t}"`);
-    }
-    for (const table of tables) {
-      const r = await turso.execute({ sql: `SELECT * FROM "${table}"`, args: [] });
-      const rows = rowsToObjects(r.rows, r.columns);
-      if (rows.length === 0) continue;
-      const cols = Object.keys(rows[0]);
-      const ph = cols.map(() => '?').join(',');
-      const qn = cols.map(c => `"${c}"`).join(',');
-      const stmt = db.prepare(`INSERT INTO "${table}" (${qn}) VALUES (${ph})`);
-      for (const row of rows) {
-        stmt.run(cols.map(c => row[c]));
-      }
-    }
-    db.exec("COMMIT");
-  } catch (e) {
-    try { db.exec("ROLLBACK"); } catch (e2) { /* ignore */ }
-    throw e;
-  }
-}
-
 setInterval(cleanupSessions, 3600000);
 
 function prepareBackup() {
@@ -332,4 +173,4 @@ async function logDebug(type, message, detail) {
   }
 }
 
-module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug, SYNC_TABLES };
+module.exports = { initDB, closeDB, run, runWithResults, queryAll, queryOne, getDB, SQLiteSessionStore, checkpoint, prepareBackup, nowWIB, logDebug };

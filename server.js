@@ -9,11 +9,10 @@ const multer = require('multer');
 const fs = require('fs');
 
 const Database = require('better-sqlite3');
-const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug } = require('./database');
+const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, prepareBackup, nowWIB, logDebug } = require('./database');
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isAdminOrCS, isCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
-const cloudinary = require('./cloudinary');
 
 global.logDebug = logDebug;
 
@@ -31,14 +30,6 @@ const upload = multer({ storage: multer.memoryStorage(), fileFilter, limits: { f
 
 async function saveUploadedFile(file) {
   if (!file) return null;
-  if (cloudinary.USE_CLOUDINARY) {
-    try {
-      return await cloudinary.uploadBuffer(file.buffer);
-    } catch (e) {
-      console.error('Cloudinary upload failed:', e.message);
-      return null;
-    }
-  }
   const dir = path.join(__dirname, 'public', 'uploads');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const ext = path.extname(file.originalname);
@@ -158,10 +149,6 @@ initDB();
 
 async function startup() {
   try {
-    await ensureTursoTables();
-    if (process.env.TURSO_DB_URL) {
-      try { await exportTursoToLocal(); console.log('Turso → Local sync done'); } catch (e) { console.error('Turso → Local sync error:', e.message); }
-    }
     await seed();
   } catch (e) {
     console.error('Startup DB error (non-fatal):', e.message);
@@ -172,8 +159,7 @@ async function startup() {
   console.log('================================================');
   console.log('  Broco Smart Care - CMS Running!');
   console.log(`  Local   : http://localhost:${PORT}`);
-  if (process.env.TURSO_DB_URL) console.log('  Database : Turso (remote)');
-  else console.log(`  Network : http://${ip}:${PORT}`);
+  console.log(`  Network : http://${ip}:${PORT}`);
   console.log('================================================');
   console.log('');
 }
@@ -897,9 +883,6 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => 
   const dbPath = path.join(__dirname, 'database.sqlite');
   if (!fs.existsSync(dbPath)) return res.redirect('/admin/settings?error=db_not_found');
   prepareBackup();
-  if (process.env.TURSO_DB_URL) {
-    try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
-  }
   prepareBackup();
   const dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   res.download(dbPath, `broco-backup-${dateStr}.sqlite`);
@@ -908,9 +891,6 @@ app.get('/admin/backup/download', isAuthenticated, isAdmin, async (req, res) => 
 var archiver = require('archiver');
 app.get('/admin/backup/download-full', isAuthenticated, isAdmin, async function(req, res) {
   prepareBackup();
-  if (process.env.TURSO_DB_URL) {
-    try { await exportTursoToLocal(); } catch (e) { console.error('Export Turso error:', e.message); }
-  }
   prepareBackup();
   var dateStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   var zipPath = path.join(__dirname, 'temp', 'broco-full-backup-' + dateStr + '.zip');
@@ -988,7 +968,6 @@ app.post('/admin/settings/restore', isAuthenticated, isAdmin, function(req, res,
     uploadedFile = null;
     try {
       initDB();
-      if (process.env.TURSO_DB_URL) await syncLocalToTurso();
       await queryAll("SELECT COUNT(*) FROM users");
       try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch(e) {}
       try {
@@ -1074,7 +1053,6 @@ app.post('/admin/settings/restore-full', isAuthenticated, isAdmin, function(req,
     uploadedFile = null;
     try {
       initDB();
-      if (process.env.TURSO_DB_URL) await syncLocalToTurso();
       await queryAll("SELECT COUNT(*) FROM users");
       try {
         if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
