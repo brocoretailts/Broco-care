@@ -33,15 +33,16 @@
   </main>
 </div>
 <script>
+var csrfToken = '<%= csrf %>';
 function markAllRead() {
-  fetch('/api/notifications/read-all', {method:'POST'}).then(function(r){return r.json()}).then(function(){location.reload()});
+  fetch('/api/notifications/read-all', {method:'POST', headers:{'x-csrf-token':csrfToken}}).then(function(r){return r.json()}).then(function(){location.reload()});
 }
 function deleteRead() {
   if (!confirm('Hapus notifikasi lama yang sudah dibaca?')) return;
-  fetch('/api/notifications/delete-read', {method:'POST'}).then(function(r){return r.json()}).then(function(){location.reload()});
+  fetch('/api/notifications/delete-read', {method:'POST', headers:{'x-csrf-token':csrfToken}}).then(function(r){return r.json()}).then(function(){location.reload()});
 }
 function markRead(id) {
-  fetch('/api/notifications/read/' + id, {method:'POST'}).then(function(r){return r.json()});
+  fetch('/api/notifications/read/' + id, {method:'POST', headers:{'x-csrf-token':csrfToken}}).then(function(r){return r.json()});
 }
 </script>
 <%- include('../partials/footer') %>
