@@ -21,7 +21,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif','application/pdf','video/mp4','video/webm','video/quicktime'];
+const ALLOWED_MIMES = ['image/jpeg','image/png','image/gif','image/webp','image/heic','image/heif','application/pdf','video/mp4','video/webm','video/quicktime','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel'];
 function fileFilter(req, file, cb) {
   if (ALLOWED_MIMES.includes(file.mimetype)) return cb(null, true);
   console.log('Multer rejected file:', file.fieldname, file.originalname, file.mimetype);
@@ -706,7 +706,7 @@ app.post('/admin/products/:id/delete', isAuthenticated, isAdmin, async (req, res
 });
 
 app.post('/admin/products/import', isAuthenticated, isAdmin, upload.single('excel'), async (req, res) => {
-  if (!req.file) return res.redirect('/admin/products?import_error=no_file');
+  if (!req.file) return res.redirect('/admin/products?import_error=' + encodeURIComponent('File tidak terupload. Pastikan format .xlsx atau .xls.'));
   try {
     const XLSX = require('xlsx');
     var wb = XLSX.read(req.file.buffer, { type: 'buffer' });
@@ -718,7 +718,7 @@ app.post('/admin/products/import', isAuthenticated, isAdmin, upload.single('exce
       var kode = (r['Kode Barang'] || r['kode_barang'] || r['KODE_BARANG'] || '').toString().trim();
       var nama = (r['Nama Produk'] || r['nama_produk'] || r['NAMA_PRODUK'] || '').toString().trim();
       var tipe = (r['Tipe'] || r['tipe'] || r['TIPE'] || '').toString().trim();
-      var garansi = parseInt(r['Garansi'] || r['garansi'] || r['garansi_bulan'] || 0) || 0;
+      var garansi = parseInt(String(r['Garansi'] || r['garansi'] || r['garansi_bulan'] || '0').replace(/[^0-9]/g,'')) || 0;
       if (!kode || !nama) { skipped++; continue; }
       try {
         var exist = await queryOne("SELECT id FROM products WHERE kode_barang = ?", [kode]);
