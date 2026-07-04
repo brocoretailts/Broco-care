@@ -1,0 +1,55 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <h4 class="fw-bold mb-3"><i class="bi bi-speedometer2 me-2"></i>Dashboard CS</h4>
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <a href="/admin/tickets/create" class="text-decoration-none">
+          <div class="card border-0 shadow-sm text-center py-4 h-100">
+            <div class="card-body">
+              <i class="bi bi-plus-circle" style="font-size:2.5rem;color:var(--bs-primary)"></i>
+              <h5 class="mt-2">Buat Ticket Baru</h5>
+              <p class="small text-secondary mb-0">Laporkan complaint customer</p>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-md-6">
+        <a href="/cs/tickets" class="text-decoration-none">
+          <div class="card border-0 shadow-sm text-center py-4 h-100">
+            <div class="card-body">
+              <i class="bi bi-ticket" style="font-size:2.5rem;color:var(--bs-warning)"></i>
+              <h5 class="mt-2">Ticket Saya</h5>
+              <p class="small text-secondary mb-0">Lihat ticket yang pernah dibuat</p>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-semibold">Ticket Terbaru</div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr><th>Ticket</th><th>Customer</th><th>Status</th><th>Tanggal</th></tr>
+          </thead>
+          <tbody>
+            <% tickets.forEach(function(t) { %>
+            <tr>
+              <td class="fw-semibold"><%= t.ticket_no %></td>
+              <td><%= t.customer_name %></td>
+              <td><span class="badge bg-<%= t.status === 'waiting' ? 'warning' : t.status === 'approval' ? 'warning text-white' : t.status === 'scheduled' ? 'primary' : t.status === 'on_progress' ? 'purple' : t.status === 'completed' ? 'success' : 'danger' %>"><%= t.status %></span></td>
+              <td class="small text-secondary"><%= t.created_at %></td>
+            </tr>
+            <% }) %>
+            <% if (!tickets.length) { %>
+            <tr><td colspan="4" class="text-center text-secondary py-3">Belum ada ticket</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<%- include('../partials/footer') %>
