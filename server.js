@@ -11,7 +11,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, ensureTursoTables, syncLocalToTurso, exportTursoToLocal, prepareBackup, nowWIB, logDebug } = require('./database');
 const { seed } = require('./seed');
-const { isAuthenticated, isAdmin, isAdminOrCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
+const { isAuthenticated, isAdmin, isAdminOrCS, isCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
 const cloudinary = require('./cloudinary');
 
