@@ -457,6 +457,7 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdminOrCS, async (req, res) => 
     wa_ok: req.query.wa_ok,
     wa_total: req.query.wa_total,
     wa_error: req.query.wa_error,
+    success: req.query.success,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });

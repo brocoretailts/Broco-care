@@ -12,6 +12,9 @@
         <% if (wa_ok === '0') { %>Cek koneksi WA di menu WhatsApp.<% } %>
       </div>
     <% } %>
+    <% if (success === 'voucher_created') { %>
+    <div class="alert alert-success alert-dismissible fade show py-2">Voucher garansi berhasil dibuat!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+    <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
       <div>
