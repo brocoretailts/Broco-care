@@ -6,6 +6,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text me-2"></i>Voucher Garansi</h4>
       <div>
+        <button onclick="sendVoucherWA(<%= v.ticket_id %>)" class="btn btn-success"><i class="bi bi-whatsapp"></i> Kirim ke WA Customer</button>
         <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i> Cetak</button>
         <a href="/admin/tickets/<%= v.ticket_id %>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
       </div>
@@ -97,4 +98,19 @@
   body { background: white !important; }
 }
 </style>
+<script>
+function sendVoucherWA(ticketId) {
+  if (!confirm('Kirim voucher garansi ke WA konsumen?')) return;
+  var btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = 'Mengirim...';
+  fetch('/admin/tickets/' + ticketId + '/send-voucher-wa', { method: 'POST', headers: { 'x-csrf-token': '<%= csrf %>' } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.success) { alert('Voucher berhasil dikirim!'); } else { alert('Gagal: ' + (d.error || 'unknown')); }
+    })
+    .catch(function() { alert('Gagal mengirim. Cek koneksi WA.'); })
+    .finally(function() { btn.disabled = false; btn.innerHTML = '<i class="bi bi-whatsapp"></i> Kirim ke WA Customer'; });
+}
+</script>
 <%- include('../partials/footer') %>

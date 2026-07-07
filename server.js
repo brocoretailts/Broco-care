@@ -1389,6 +1389,7 @@ app.get('/admin/voucher/:id', isAuthenticated, isAdminOrCS, async (req, res) => 
     var qrDataUrl = await QRCode.toDataURL('https://broco-care.tech/voucher/' + v.qr_token, { width: 300, margin: 2 });
     res.render('admin/voucher', {
       v, qrDataUrl,
+      csrf: req.csrfToken ? req.csrfToken() : '',
       notifCount: await getNotifCount(req.session.user),
       notifs: await getNotifs(req.session.user)
     });
