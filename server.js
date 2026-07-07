@@ -1369,13 +1369,18 @@ app.post('/admin/tickets/:id/generate-voucher', isAuthenticated, isAdmin, async 
 
     var qrToken = require('crypto').randomBytes(32).toString('hex');
     var voucherNo = generateVoucherNo();
+    var expiredAt = req.body.expired_at;
+    if (!expiredAt) {
+      var d = new Date(); d.setDate(d.getDate() + 30);
+      expiredAt = d.toISOString().split('T')[0];
+    }
     var r = await runWithResults(
       `INSERT INTO service_vouchers (voucher_no, ticket_id, customer_name, customer_hp, customer_alamat,
         product_name, product_type, serial_number, keluhan, decision, qr_token, created_by, expired_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime','+30 days'))`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [voucherNo, ticket.id, ticket.customer_name, ticket.customer_hp, ticket.customer_alamat,
        ticket.nama_produk, ticket.tipe, ticket.serial_number, ticket.keluhan, ticket.management_decision,
-       qrToken, req.session.user.id]
+       qrToken, req.session.user.id, expiredAt]
     );
     if (ticket.created_by) {
       await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)", [ticket.created_by, `Voucher ${voucherNo} sudah diterbitkan untuk ${ticket.customer_name}`, `/admin/voucher/${r.lastInsertRowid}`]);
