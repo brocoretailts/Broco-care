@@ -467,7 +467,10 @@ app.post('/admin/tickets/:id/analysis', isAuthenticated, isAdmin, async (req, re
   await run("UPDATE tickets SET admin_analysis = ?, status = 'approval', updated_at = ? WHERE id = ?", [analysis, nowWIB(), req.params.id]);
   await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)", [req.params.id, req.session.user.id, 'send_approval', 'Dikirim ke management untuk approval']);
   await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', `Ticket membutuhkan approval Anda`, '/management/approval']);
-  const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+  const ticket = await queryOne("SELECT ticket_no, customer_name, created_by FROM tickets WHERE id = ?", [req.params.id]);
+  if (ticket && ticket.created_by) {
+    await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)", [ticket.created_by, `Ticket ${ticket.ticket_no} sudah dikirim ke Management untuk approval`, `/admin/tickets/${req.params.id}`]);
+  }
   var waOk = 0;
   if (ticket) {
     var phones = await getManagementPhones();
@@ -492,7 +495,10 @@ app.post('/admin/tickets/:id/followup', isAuthenticated, isAdmin, async (req, re
       [req.params.id, req.session.user.id, 'send_approval', 'Follow-up #' + newCount + ' dikirim ke management untuk re-approval']);
     await run("INSERT INTO notifications (role, message, link) VALUES (?, ?, ?)", ['management', 'Follow-up ticket membutuhkan re-approval Anda', '/management/approval']);
     await logDebug('followup_db_done', 'DB updates selesai');
-    const ticket = await queryOne("SELECT ticket_no, customer_name FROM tickets WHERE id = ?", [req.params.id]);
+    const ticket = await queryOne("SELECT ticket_no, customer_name, created_by FROM tickets WHERE id = ?", [req.params.id]);
+    if (ticket && ticket.created_by) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)", [ticket.created_by, `Follow-up ${ticket.ticket_no} sudah dikirim ke Management`, `/admin/tickets/${req.params.id}`]);
+    }
     var waOk = 0;
     var totalPhones = 0;
     if (ticket) {
@@ -1362,6 +1368,9 @@ app.post('/admin/tickets/:id/generate-voucher', isAuthenticated, isAdmin, async 
        ticket.nama_produk, ticket.tipe, ticket.serial_number, ticket.keluhan, ticket.management_decision,
        qrToken, req.session.user.id]
     );
+    if (ticket.created_by) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)", [ticket.created_by, `Voucher ${voucherNo} sudah diterbitkan untuk ${ticket.customer_name}`, `/admin/voucher/${r.lastInsertRowid}`]);
+    }
     res.redirect('/admin/tickets/' + req.params.id + '?voucher=' + r.lastInsertRowid + '&success=voucher_created');
   } catch (e) {
     console.error('Voucher error:', e);
