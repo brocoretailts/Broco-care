@@ -52,6 +52,9 @@
         <i class="bi bi-check2-square me-2"></i> Approval
         <% if (notifCount > 0) { %><span class="badge bg-danger rounded-pill float-end"><%= notifCount %></span><% } %>
       </a>
+      <a href="/management/approval/history" class="sidebar-link <%= path.includes('history') ? 'active' : '' %>">
+        <i class="bi bi-clock-history me-2"></i> Riwayat Approval
+      </a>
       <a href="/management/reports" class="sidebar-link <%= path.includes('reports') ? 'active' : '' %>">
         <i class="bi bi-bar-chart me-2"></i> Laporan
       </a>

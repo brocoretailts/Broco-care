@@ -214,6 +214,27 @@
           </div>
         </div>
         <% } %>
+
+        <% if (ticket.management_decision && ticket.management_decision !== 'reject') { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-text me-1"></i>Voucher Garansi</h6></div>
+          <div class="card-body">
+            <% if (voucher) { %>
+            <p class="mb-2">Voucher sudah dibuat:</p>
+            <p class="fw-bold text-primary mb-1"><%= voucher.voucher_no %></p>
+            <p class="small text-muted mb-2">Status: <span class="badge bg-<%= voucher.status === 'active' ? 'success' : 'secondary' %>"><%= voucher.status %></span></p>
+            <a href="/admin/voucher/<%= voucher.id %>" class="btn btn-sm btn-primary"><i class="bi bi-eye"></i> Lihat Voucher</a>
+            <button onclick="sendVoucherWA(<%= ticket.id %>)" class="btn btn-sm btn-success"><i class="bi bi-whatsapp"></i> Kirim ke WA Customer</button>
+            <% } else { %>
+            <p class="text-muted small mb-2">Buat voucher garansi untuk konsumen (barang dikirim ke pusat).</p>
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/generate-voucher">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button type="submit" class="btn btn-success"><i class="bi bi-file-earmark-text"></i> Generate Voucher</button>
+            </form>
+            <% } %>
+          </div>
+        </div>
+        <% } %>
         <% if (ticket.status === 'scheduled' && schedule) { %>
         <div class="card border-0 shadow-sm mb-3">
           <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -529,3 +550,23 @@
 
   </div>
 </div>
+
+<script>
+function sendVoucherWA(ticketId) {
+  if (!confirm('Kirim voucher garansi ke WA konsumen?')) return;
+  var btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengirim...';
+  fetch('/admin/tickets/' + ticketId + '/send-voucher-wa', { method: 'POST', headers: { 'x-csrf-token': '<%= csrf %>' } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        alert('Voucher berhasil dikirim ke WA konsumen!');
+      } else {
+        alert('Gagal: ' + (d.error || 'Unknown error'));
+      }
+    })
+    .catch(function(e) { alert('Error: ' + e.message); })
+    .finally(function() { btn.disabled = false; btn.innerHTML = '<i class="bi bi-whatsapp"></i> Kirim ke WA Customer'; });
+}
+</script>

@@ -2,71 +2,114 @@
 <div class="d-flex">
   <%- include('../partials/sidebar') %>
   <main class="main-content">
-    <h4 class="fw-bold mb-4"><i class="bi bi-check2-square me-2"></i>Approval Management</h4>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-check2-square me-2"></i>Approval Management</h4>
+      <a href="/management/approval/history" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> Riwayat Approval</a>
+    </div>
 
-    <% tickets.forEach(function(t) { %>
-    <div class="card border-0 shadow-sm mb-3">
-      <div class="card-body">
-        <div class="row">
-          <div class="col-lg-7">
-            <h5 class="fw-bold text-primary"><%= t.ticket_no %><% if (t.follow_up_count > 0) { %> <span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat"></i> Follow-up #<%= t.follow_up_count %></span><% } %></h5>
-            <table class="table table-sm table-borderless mb-0">
-              <tr><td class="text-secondary" style="width: 120px;">Customer</td><td class="fw-semibold"><%= t.customer_name %></td></tr>
-              <tr><td class="text-secondary">Produk</td><td><%= t.nama_produk %> <%= t.tipe ? '('+t.tipe+')' : '' %></td></tr>
-              <tr><td class="text-secondary">Keluhan</td><td><%= t.keluhan %></td></tr>
-              <tr><td class="text-secondary">Analisa Admin</td><td class="text-primary"><%= t.admin_analysis || '-' %></td></tr>
-              <tr><td class="text-secondary">Kota</td><td><%= t.customer_kota %></td></tr>
-              <tr><td class="text-secondary">Dibuat Oleh</td><td><%= t.created_by_name || '-' %></td></tr>
-              <% if (t.follow_up_count > 0) { %>
-              <tr><td class="text-secondary">Follow-up</td><td><span class="badge bg-warning text-dark">#<%= t.follow_up_count %></span></td></tr>
-              <% } %>
-            </table>
-          </div>
-          <div class="col-lg-5">
-            <form method="POST" action="/management/approval/<%= t.id %>">
-              <input type="hidden" name="_csrf" value="<%= csrf %>">
-              <div class="mb-2">
-                <label class="form-label small fw-semibold">Keputusan</label>
-                <div class="d-flex gap-2">
-                  <div class="form-check">
-                    <input class="form-check-input" type="radio" name="decision" value="Servis" id="servis_<%= t.id %>" required>
-                    <label class="form-check-label" for="servis_<%= t.id %>">Servis</label>
-                  </div>
-                  <div class="form-check">
-                    <input class="form-check-input" type="radio" name="decision" value="Ganti Unit" id="ganti_<%= t.id %>">
-                    <label class="form-check-label" for="ganti_<%= t.id %>">Ganti Barang</label>
-                  </div>
-                  <div class="form-check">
-                    <input class="form-check-input" type="radio" name="decision" value="reject" id="tolak_<%= t.id %>">
-                    <label class="form-check-label text-danger" for="tolak_<%= t.id %>">Tolak Claim</label>
-                  </div>
-                </div>
+    <ul class="nav nav-tabs mb-3" id="approvalTabs">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pending">Menunggu <span class="badge bg-warning"><%= tickets.length %></span></button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#processed">Sudah Diproses</button></li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="pending">
+        <% tickets.forEach(function(t) { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body">
+            <div class="row">
+              <div class="col-lg-7">
+                <h5 class="fw-bold text-primary"><%= t.ticket_no %><% if (t.follow_up_count > 0) { %> <span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat"></i> Follow-up #<%= t.follow_up_count %></span><% } %></h5>
+                <table class="table table-sm table-borderless mb-0">
+                  <tr><td class="text-secondary" style="width: 120px;">Customer</td><td class="fw-semibold"><%= t.customer_name %></td></tr>
+                  <tr><td class="text-secondary">Produk</td><td><%= t.nama_produk %> <%= t.tipe ? '('+t.tipe+')' : '' %></td></tr>
+                  <tr><td class="text-secondary">Keluhan</td><td><%= t.keluhan %></td></tr>
+                  <tr><td class="text-secondary">Analisa Admin</td><td class="text-primary"><%= t.admin_analysis || '-' %></td></tr>
+                  <tr><td class="text-secondary">Dibuat Oleh</td><td><%= t.created_by_name || '-' %></td></tr>
+                  <% if (t.follow_up_count > 0) { %>
+                  <tr><td class="text-secondary">Follow-up</td><td><span class="badge bg-warning text-dark">#<%= t.follow_up_count %></span></td></tr>
+                  <% } %>
+                </table>
               </div>
-              <div class="mb-2">
-                <label class="form-label small">Komentar</label>
-                <textarea name="comment" class="form-control" rows="2" placeholder="Opsional: alasan atau catatan..."></textarea>
+              <div class="col-lg-5">
+                <form method="POST" action="/management/approval/<%= t.id %>">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold">Keputusan</label>
+                    <div class="d-flex gap-2">
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="decision" value="Servis" id="servis_<%= t.id %>" required>
+                        <label class="form-check-label" for="servis_<%= t.id %>">Servis</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="decision" value="Ganti Unit" id="ganti_<%= t.id %>">
+                        <label class="form-check-label" for="ganti_<%= t.id %>">Ganti Barang</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="decision" value="reject" id="tolak_<%= t.id %>">
+                        <label class="form-check-label text-danger" for="tolak_<%= t.id %>">Tolak Claim</label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label small">Komentar</label>
+                    <textarea name="comment" class="form-control" rows="2" placeholder="Opsional..."></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-success approveBtn"><i class="bi bi-check-lg"></i> PROSES</button>
+                </form>
               </div>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-success approveBtn"><i class="bi bi-check-lg"></i> PROSES</button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
+        <% }) %>
+        <% if (tickets.length === 0) { %>
+        <div class="card border-0 shadow-sm">
+          <div class="card-body text-center py-5">
+            <i class="bi bi-check2-all text-success" style="font-size: 3rem;"></i>
+            <p class="mt-2 text-secondary">Semua ticket sudah diproses</p>
+          </div>
+        </div>
+        <% } %>
+      </div>
+
+      <div class="tab-pane fade" id="processed">
+        <p class="text-secondary small mb-3">Ticket yang sudah diputuskan. Klik <strong>Reset Approval</strong> untuk mengirim ulang ke antrian approval.</p>
+        <% processed.forEach(function(t) { %>
+        <div class="card border-0 shadow-sm mb-3 <%= t.status === 'rejected' ? 'border-start border-danger border-4' : 'border-start border-success border-4' %>">
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-lg-8">
+                <h6 class="fw-bold"><%= t.ticket_no %> <span class="badge bg-<%= t.status === 'rejected' ? 'danger' : 'success' %>"><%= t.status === 'rejected' ? 'Ditolak' : 'Disetujui' %></span></h6>
+                <p class="mb-1 small"><strong><%= t.customer_name %></strong> - <%= t.nama_produk %></p>
+                <p class="mb-1 small text-secondary">Keputusan: <span class="fw-semibold"><%= t.management_decision %></span></p>
+                <% if (t.management_comment) { %><p class="mb-0 small text-muted"><i>Catatan: <%= t.management_comment %></i></p><% } %>
+                <small class="text-muted">Oleh: <%= t.approved_by_name || '-' %> | <%= t.updated_at %></small>
+              </div>
+              <div class="col-lg-4 text-end">
+                <form method="POST" action="/management/approval/<%= t.id %>/reset" onsubmit="return confirm('Reset approval untuk <%= t.ticket_no %>? Ticket akan kembali ke antrian approval.')">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <a href="/admin/tickets/<%= t.id %>" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> Detail</a>
+                  <button type="submit" class="btn btn-sm btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i> Reset Approval</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+        <% }) %>
+        <% if (processed.length === 0) { %>
+        <div class="card border-0 shadow-sm">
+          <div class="card-body text-center py-5">
+            <i class="bi bi-inbox text-secondary" style="font-size: 3rem;"></i>
+            <p class="mt-2 text-secondary">Belum ada ticket yang diproses</p>
+          </div>
+        </div>
+        <% } %>
       </div>
     </div>
-    <% }) %>
-    <% if (tickets.length === 0) { %>
-    <div class="card border-0 shadow-sm">
-      <div class="card-body text-center py-5">
-        <i class="bi bi-check2-all text-success" style="font-size: 3rem;"></i>
-        <p class="mt-2 text-secondary">Semua ticket sudah diproses</p>
-      </div>
-    </div>
-    <% } %>
   </main>
 </div>
 <script>
-document.querySelectorAll('input[name="decision"]').forEach(function(radio) {
+document.querySelectorAll('#pending input[name="decision"]').forEach(function(radio) {
   radio.addEventListener('change', function() {
     var form = this.closest('form');
     var btn = form.querySelector('.approveBtn');
@@ -81,4 +124,3 @@ document.querySelectorAll('input[name="decision"]').forEach(function(radio) {
 });
 </script>
 <%- include('../partials/footer') %>
-

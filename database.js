@@ -74,6 +74,22 @@ function createTablesLocal() {
     message TEXT NOT NULL, detail TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime'))
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS approval_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL,
+    action TEXT NOT NULL, decision TEXT, comment TEXT,
+    old_status TEXT, new_status TEXT, user_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS service_vouchers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_no TEXT UNIQUE NOT NULL,
+    ticket_id INTEGER NOT NULL, customer_name TEXT NOT NULL,
+    customer_hp TEXT, customer_alamat TEXT,
+    product_name TEXT, product_type TEXT, serial_number TEXT,
+    keluhan TEXT, decision TEXT, status TEXT DEFAULT 'active',
+    qr_token TEXT UNIQUE NOT NULL, created_by INTEGER,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    expired_at TEXT
+  )`);
 }
 
 

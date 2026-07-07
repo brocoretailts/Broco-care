@@ -13,6 +13,7 @@ const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionS
 const { seed } = require('./seed');
 const { isAuthenticated, isAdmin, isAdminOrCS, isCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
+const QRCode = require('qrcode');
 
 global.logDebug = logDebug;
 
@@ -431,7 +432,7 @@ app.get('/admin/tickets', isAuthenticated, isAdmin, async (req, res) => {
   });
 });
 
-app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
+app.get('/admin/tickets/:id', isAuthenticated, isAdminOrCS, async (req, res) => {
   const ticket = await queryOne(`
     SELECT t.*, p.nama_produk, p.tipe, p.garansi_bulan,
       u1.name as created_by_name, u2.name as approved_by_name, u3.name as closed_by_name
@@ -449,9 +450,10 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdmin, async (req, res) => {
   const visit = await queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.id]);
   const logs = await queryAll("SELECT l.*, u.name as user_name FROM activity_log l LEFT JOIN users u ON l.user_id = u.id WHERE l.ticket_id = ? ORDER BY l.created_at ASC", [req.params.id]);
   const teknisi = await queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
+  const voucher = await queryOne("SELECT id, voucher_no, status FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
 
   res.render('admin/ticket-detail', {
-    ticket, schedule, visit, logs, teknisi,
+    ticket, schedule, visit, logs, teknisi, voucher,
     wa_ok: req.query.wa_ok,
     wa_total: req.query.wa_total,
     wa_error: req.query.wa_error,
@@ -1153,9 +1155,17 @@ app.get('/management/approval', isAuthenticated, isManagement, async (req, res) 
     LEFT JOIN users u ON t.created_by = u.id
     WHERE t.status = 'approval' ORDER BY t.created_at DESC
   `);
+  const processed = await queryAll(`
+    SELECT t.*, p.nama_produk, p.tipe, u.name as created_by_name, u2.name as approved_by_name
+    FROM tickets t LEFT JOIN products p ON t.product_id = p.id
+    LEFT JOIN users u ON t.created_by = u.id
+    LEFT JOIN users u2 ON t.approved_by = u2.id
+    WHERE t.status IN ('waiting','rejected') AND t.management_decision IS NOT NULL
+    ORDER BY t.updated_at DESC LIMIT 50
+  `);
   await run("UPDATE notifications SET is_read = 1 WHERE role = 'management' AND is_read = 0");
   res.render('management/approval', {
-    tickets,
+    tickets, processed,
     notifCount: await getNotifCount(req.session.user),
     notifs: await getNotifs(req.session.user)
   });
@@ -1174,10 +1184,18 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
         [decision, comment || '', nowWIB(), req.params.id]);
       await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'reject', `Ditolak: ${comment || 'Tidak ada komentar'}`]);
+      await run("INSERT INTO approval_logs (ticket_id, action, decision, comment, old_status, new_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [req.params.id, 'reject', decision, comment || '', 'approval', 'rejected', req.session.user.id]);
       var adminIdsReject = await getAdminIds();
       for (const uid of adminIdsReject) {
         await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket ditolak oleh Management`, `/admin/tickets/${req.params.id}`]);
+      }
+      // Notify CS
+      var csIdsRej = await queryAll("SELECT id FROM users WHERE role = 'cs'");
+      for (const u of csIdsRej) {
+        await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+          [u.id, `Ticket ${tickNo} ditolak Management`, `/admin/tickets/${req.params.id}`]);
       }
       var adminPhones = await getAdminPhones();
       if (adminPhones.length) await wa.sendToMany(adminPhones, wa.sendRejectedNotification, tickNo);
@@ -1187,10 +1205,18 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
         [decision, comment || '', req.session.user.id, wib2, wib2, req.params.id]);
       await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
         [req.params.id, req.session.user.id, 'approve', `Disetujui: ${decision} - ${comment || ''}`]);
+      await run("INSERT INTO approval_logs (ticket_id, action, decision, comment, old_status, new_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [req.params.id, 'approve', decision, comment || '', 'approval', 'waiting', req.session.user.id]);
       var adminIds = await getAdminIds();
       for (const uid of adminIds) {
         await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
           [uid, `Ticket disetujui Management, silakan buat jadwal`, `/admin/tickets/${req.params.id}`]);
+      }
+      // Notify CS
+      var csIds = await queryAll("SELECT id FROM users WHERE role = 'cs'");
+      for (const u of csIds) {
+        await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+          [u.id, `Ticket ${tickNo} disetujui Management`, `/admin/tickets/${req.params.id}`]);
       }
       var adminPhones = await getAdminPhones();
       if (adminPhones.length) await wa.sendToMany(adminPhones, wa.sendApprovedNotification, tickNo);
@@ -1198,6 +1224,54 @@ app.post('/management/approval/:id', isAuthenticated, isManagement, async (req, 
     res.redirect('/management/approval');
   } catch (e) {
     console.error('Approval error:', e);
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+app.post('/management/approval/:id/reset', isAuthenticated, isManagement, async (req, res) => {
+  try {
+    var tick = await queryOne("SELECT ticket_no, management_decision, management_comment, status FROM tickets WHERE id = ?", [req.params.id]);
+    if (!tick) return res.redirect('/management/approval?error=not_found');
+    if (tick.status !== 'waiting' && tick.status !== 'rejected') return res.redirect('/management/approval?error=wrong_status');
+    await run("UPDATE tickets SET status = 'approval', approved_by = NULL, approved_at = NULL, management_decision = NULL, management_comment = NULL, updated_at = ? WHERE id = ?",
+      [nowWIB(), req.params.id]);
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.id, req.session.user.id, 'reset_approval', 'Approval direset, perlu persetujuan ulang']);
+    await run("INSERT INTO approval_logs (ticket_id, action, decision, comment, old_status, new_status, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [req.params.id, 'reset', '', 'Approval direset oleh Management', tick.status, 'approval', req.session.user.id]);
+    var adminIds = await getAdminIds();
+    for (const uid of adminIds) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        [uid, `Ticket ${tick.ticket_no} perlu approval ulang`, `/admin/tickets/${req.params.id}`]);
+    }
+    var csIds = await queryAll("SELECT id FROM users WHERE role = 'cs'");
+    for (const u of csIds) {
+      await run("INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        [u.id, `Ticket ${tick.ticket_no} perlu approval ulang`, `/admin/tickets/${req.params.id}`]);
+    }
+    res.redirect('/management/approval?success=reset');
+  } catch (e) {
+    console.error('Reset approval error:', e);
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+app.get('/management/approval/history', isAuthenticated, isManagement, async (req, res) => {
+  try {
+    var logs = await queryAll(`
+      SELECT al.*, t.ticket_no, t.customer_name, u.name as user_name
+      FROM approval_logs al
+      LEFT JOIN tickets t ON al.ticket_id = t.id
+      LEFT JOIN users u ON al.user_id = u.id
+      ORDER BY al.created_at DESC LIMIT 100
+    `);
+    res.render('management/approval-history', {
+      logs,
+      notifCount: await getNotifCount(req.session.user),
+      notifs: await getNotifs(req.session.user)
+    });
+  } catch (e) {
+    console.error('Approval history error:', e);
     res.status(500).send('Error: ' + e.message);
   }
 });
@@ -1257,6 +1331,92 @@ app.get('/management/reports', isAuthenticated, isManagement, async (req, res) =
   } catch (e) {
     console.error('Reports error:', e);
     res.status(500).send('Error loading reports: ' + e.message);
+  }
+});
+
+/* ============= VOUCHER GARANSI ============= */
+
+function generateVoucherNo() {
+  return 'BRC-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+}
+
+app.post('/admin/tickets/:id/generate-voucher', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    var ticket = await queryOne(`
+      SELECT t.*, p.nama_produk, p.tipe FROM tickets t
+      LEFT JOIN products p ON t.product_id = p.id WHERE t.id = ?
+    `, [req.params.id]);
+    if (!ticket) return res.redirect('/admin/tickets?error=not_found');
+    if (!ticket.approved_by) return res.redirect('/admin/tickets/' + req.params.id + '?error=not_approved');
+
+    var existing = await queryOne("SELECT id, voucher_no FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
+    if (existing) return res.redirect('/admin/tickets/' + req.params.id + '?voucher=' + existing.id);
+
+    var qrToken = require('crypto').randomBytes(32).toString('hex');
+    var voucherNo = generateVoucherNo();
+    var r = await runWithResults(
+      `INSERT INTO service_vouchers (voucher_no, ticket_id, customer_name, customer_hp, customer_alamat,
+        product_name, product_type, serial_number, keluhan, decision, qr_token, created_by, expired_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime','+30 days'))`,
+      [voucherNo, ticket.id, ticket.customer_name, ticket.customer_hp, ticket.customer_alamat,
+       ticket.nama_produk, ticket.tipe, ticket.serial_number, ticket.keluhan, ticket.management_decision,
+       qrToken, req.session.user.id]
+    );
+    res.redirect('/admin/tickets/' + req.params.id + '?voucher=' + r.lastInsertRowid + '&success=voucher_created');
+  } catch (e) {
+    console.error('Voucher error:', e);
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+app.get('/admin/voucher/:id', isAuthenticated, isAdminOrCS, async (req, res) => {
+  try {
+    var v = await queryOne(
+      "SELECT v.*, t.ticket_no, t.customer_hp as ticket_hp FROM service_vouchers v LEFT JOIN tickets t ON v.ticket_id = t.id WHERE v.id = ?",
+      [req.params.id]
+    );
+    if (!v) return res.status(404).send('Voucher tidak ditemukan');
+    var qrDataUrl = await QRCode.toDataURL('https://broco-care.tech/voucher/' + v.qr_token, { width: 300, margin: 2 });
+    res.render('admin/voucher', {
+      v, qrDataUrl,
+      notifCount: await getNotifCount(req.session.user),
+      notifs: await getNotifs(req.session.user)
+    });
+  } catch (e) {
+    console.error('Voucher view error:', e);
+    res.status(500).send('Error: ' + e.message);
+  }
+});
+
+app.get('/voucher/:token', async (req, res) => {
+  try {
+    var v = await queryOne("SELECT * FROM service_vouchers WHERE qr_token = ?", [req.params.token]);
+    if (!v) return res.status(404).send('Voucher tidak valid atau sudah tidak berlaku');
+    res.render('public/voucher', { v });
+  } catch (e) {
+    console.error('Public voucher error:', e);
+    res.status(500).send('Error');
+  }
+});
+
+app.post('/admin/tickets/:id/send-voucher-wa', isAuthenticated, isAdminOrCS, async (req, res) => {
+  try {
+    var v = await queryOne(
+      "SELECT v.*, t.ticket_no, t.customer_hp FROM service_vouchers v LEFT JOIN tickets t ON v.ticket_id = t.id WHERE v.ticket_id = ?",
+      [req.params.id]
+    );
+    if (!v) return res.json({ ok: false, error: 'Voucher tidak ditemukan' });
+    if (!v.customer_hp) return res.json({ ok: false, error: 'Nomor HP konsumen tidak tersedia' });
+
+    var message = `*BROCO SMART CARE - VOUCHER GARANSI*\n\nYth. ${v.customer_name},\n\nVoucher garansi untuk ticket ${v.ticket_no} telah diterbitkan.\n\nNo. Voucher: ${v.voucher_no}\nKeputusan: ${v.decision}\n\nScan QR atau buka link berikut untuk verifikasi:\nhttps://broco-care.tech/voucher/${v.qr_token}\n\nTerima kasih telah mempercayakan produk Anda kepada kami.\n\n*PT. Broco Retail Solution*`;
+    var result = await wa.sendWaMessage(v.customer_hp, message);
+
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.id, req.session.user.id, 'voucher_wa', `Voucher dikirim ke WA ${v.customer_hp}`]);
+    res.json({ ok: result.ok !== false, error: result.error || null });
+  } catch (e) {
+    console.error('Send voucher WA error:', e);
+    res.json({ ok: false, error: e.message });
   }
 });
 

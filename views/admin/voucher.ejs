@@ -1,0 +1,103 @@
+<%- include('../partials/header') %>
+<div class="d-flex">
+  <%- include('../partials/sidebar') %>
+  <main class="main-content">
+    <% if (req.query.success === 'voucher_created') { %>
+    <div class="alert alert-success alert-dismissible fade show">Voucher garansi berhasil dibuat!<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    <% } %>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text me-2"></i>Voucher Garansi</h4>
+      <div>
+        <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer"></i> Cetak</button>
+        <a href="/admin/tickets/<%= v.ticket_id %>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm" id="voucherPrint">
+      <div class="card-body p-5">
+        <!-- Voucher Header -->
+        <div class="text-center border-bottom pb-3 mb-4">
+          <img src="/images/logo.png" alt="Broco" style="height:50px;">
+          <h3 class="fw-bold mt-2">SURAT GARANSI & VOUCHER SERVICE</h3>
+          <p class="text-muted">PT. Broco Retail Solution</p>
+        </div>
+
+        <div class="row mb-4">
+          <div class="col-8">
+            <table class="table table-sm table-borderless mb-0">
+              <tr><td class="text-secondary" style="width:150px;">No. Voucher</td><td class="fw-bold fs-5 text-primary"><%= v.voucher_no %></td></tr>
+              <tr><td class="text-secondary">No. Ticket</td><td><%= v.ticket_no %></td></tr>
+              <tr><td class="text-secondary">Tanggal</td><td><%= v.created_at %></td></tr>
+              <tr><td class="text-secondary">Berlaku sd</td><td><%= v.expired_at || '-' %></td></tr>
+              <tr><td class="text-secondary">Status</td><td><span class="badge bg-<%= v.status === 'active' ? 'success' : 'secondary' %>"><%= v.status === 'active' ? 'AKTIF' : 'TIDAK AKTIF' %></span></td></tr>
+            </table>
+          </div>
+          <div class="col-4 text-center">
+            <img src="<%= qrDataUrl %>" alt="QR Code" style="width:150px;height:150px;" class="border rounded p-1">
+            <p class="small text-muted mt-1">Scan untuk verifikasi</p>
+          </div>
+        </div>
+
+        <hr>
+
+        <h5 class="fw-bold">Data Konsumen</h5>
+        <table class="table table-sm table-borderless mb-4">
+          <tr><td class="text-secondary" style="width:150px;">Nama</td><td class="fw-semibold"><%= v.customer_name %></td></tr>
+          <tr><td class="text-secondary">No. HP</td><td><%= v.customer_hp || '-' %></td></tr>
+          <tr><td class="text-secondary">Alamat</td><td><%= v.customer_alamat || '-' %></td></tr>
+        </table>
+
+        <h5 class="fw-bold">Data Produk</h5>
+        <table class="table table-sm table-borderless mb-4">
+          <tr><td class="text-secondary" style="width:150px;">Produk</td><td class="fw-semibold"><%= v.product_name || '-' %></td></tr>
+          <tr><td class="text-secondary">Tipe</td><td><%= v.product_type || '-' %></td></tr>
+          <tr><td class="text-secondary">Serial Number</td><td><%= v.serial_number || '-' %></td></tr>
+          <tr><td class="text-secondary">Keluhan</td><td><%= v.keluhan || '-' %></td></tr>
+        </table>
+
+        <h5 class="fw-bold">Keputusan Management</h5>
+        <div class="alert alert-info">
+          <strong><%= v.decision %></strong>
+        </div>
+
+        <hr>
+
+        <div class="row mt-4">
+          <div class="col-12">
+            <h6 class="fw-bold">Ketentuan:</h6>
+            <ol class="small text-muted">
+              <li>Voucher ini berlaku sebagai bukti penerimaan barang untuk pemeriksaan.</li>
+              <li>Barang akan diperiksa oleh tim teknis kami dalam waktu 1x14 hari kerja.</li>
+              <li>Apabila barang dapat diperbaiki, akan dilakukan perbaikan tanpa biaya.</li>
+              <li>Apabila barang tidak dapat diperbaiki, akan dilakukan penggantian unit sesuai keputusan Management.</li>
+              <li>Biaya pengiriman barang pengganti ditanggung oleh PT. Broco Retail Solution.</li>
+              <li>Voucher ini tidak dapat dipindahtangankan dan hanya berlaku untuk 1 (satu) kali klaim.</li>
+              <li>Voucher ini akan hangus apabila melewati tanggal berlaku.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="row mt-4 pt-3 border-top">
+          <div class="col-6 text-center">
+            <p class="mb-5"><strong>Penerima,</strong></p>
+            <p>(____________________)</p>
+          </div>
+          <div class="col-6 text-center">
+            <p class="mb-5"><strong>Hormat Kami,</strong></p>
+            <p>(____________________)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<style>
+@media print {
+  .sidebar, .sidebar-overlay, .navbar, .btn, .alert, .d-flex > .main-content > .d-flex .btn, .sidebar-header, .sidebar-menu, .sidebar-user, .sidebar-footer { display: none !important; }
+  .main-content { margin-left: 0 !important; padding: 0 !important; width: 100% !important; }
+  #voucherPrint { box-shadow: none !important; border: none !important; }
+  body { background: white !important; }
+}
+</style>
+<%- include('../partials/footer') %>
