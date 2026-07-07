@@ -227,7 +227,7 @@
             <p class="fw-bold text-primary mb-1"><%= voucher.voucher_no %></p>
             <p class="small text-muted mb-2">Status: <span class="badge bg-<%= voucher.status === 'active' ? 'success' : 'secondary' %>"><%= voucher.status %></span></p>
             <a href="/admin/voucher/<%= voucher.id %>" class="btn btn-sm btn-primary"><i class="bi bi-eye"></i> Lihat Voucher</a>
-            <button onclick="sendVoucherWA(<%= ticket.id %>)" class="btn btn-sm btn-success"><i class="bi bi-whatsapp"></i> Kirim ke WA Customer</button>
+            <button onclick="copyVoucherLink('<%= voucher.qr_token %>')" class="btn btn-sm btn-success"><i class="bi bi-link-45deg"></i> Salin Link Voucher</button>
             <% } else { %>
             <p class="text-muted small mb-2">Buat voucher garansi untuk konsumen (barang dikirim ke pusat).</p>
             <form method="POST" action="/admin/tickets/<%= ticket.id %>/generate-voucher">
@@ -555,21 +555,17 @@
 </div>
 
 <script>
-function sendVoucherWA(ticketId) {
-  if (!confirm('Kirim voucher garansi ke WA konsumen?')) return;
-  var btn = event.target;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengirim...';
-  fetch('/admin/tickets/' + ticketId + '/send-voucher-wa', { method: 'POST', headers: { 'x-csrf-token': '<%= csrf %>' } })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d.ok) {
-        alert('Voucher berhasil dikirim ke WA konsumen!');
-      } else {
-        alert('Gagal: ' + (d.error || 'Unknown error'));
-      }
-    })
-    .catch(function(e) { alert('Error: ' + e.message); })
-    .finally(function() { btn.disabled = false; btn.innerHTML = '<i class="bi bi-whatsapp"></i> Kirim ke WA Customer'; });
+function copyVoucherLink(token) {
+  var url = 'https://broco-care.tech/voucher/' + token;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function() {
+      var btn = event.target;
+      var orig = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check-lg"></i> Tersalin!';
+      setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    }).catch(function() { prompt('Salin manual:', url); });
+  } else {
+    prompt('Salin link ini ke WA konsumen:', url);
+  }
 }
 </script>

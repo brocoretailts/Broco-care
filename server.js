@@ -450,7 +450,7 @@ app.get('/admin/tickets/:id', isAuthenticated, isAdminOrCS, async (req, res) => 
   const visit = await queryOne("SELECT * FROM visit_results WHERE ticket_id = ?", [req.params.id]);
   const logs = await queryAll("SELECT l.*, u.name as user_name FROM activity_log l LEFT JOIN users u ON l.user_id = u.id WHERE l.ticket_id = ? ORDER BY l.created_at ASC", [req.params.id]);
   const teknisi = await queryAll("SELECT id, name FROM users WHERE role = 'teknisi'");
-  const voucher = await queryOne("SELECT id, voucher_no, status FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
+  const voucher = await queryOne("SELECT id, voucher_no, status, qr_token FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
 
   res.render('admin/ticket-detail', {
     ticket, schedule, visit, logs, teknisi, voucher,
