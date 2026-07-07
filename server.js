@@ -819,8 +819,10 @@ app.get('/admin/settings', isAuthenticated, isAdmin, async (req, res) => {
       }, 0)
     : 0;
   const admins = await queryAll("SELECT id, username, name, phone, email, role FROM users WHERE role IN ('admin','management','teknisi','cs') ORDER BY role, name");
+  const voucherTerms = await queryOne("SELECT value FROM settings WHERE key = ?", ['voucher_terms']);
   res.render('admin/settings', {
     dbPath, dbSize, uploadsSize, uploadsDir, admins,
+    voucherTerms: (voucherTerms ? voucherTerms.value : ''),
     user: req.session.user,
     query: req.query,
     notifCount: await getNotifCount(req.session.user),
@@ -1102,6 +1104,12 @@ app.post('/admin/settings/reset-total', isAuthenticated, isAdmin, validateCsrf, 
   await run("DELETE FROM products");
   await run("DELETE FROM users WHERE role != 'admin'");
   res.redirect('/admin/settings?success=reset_total');
+});
+
+app.post('/admin/settings/voucher-terms', isAuthenticated, isAdmin, async (req, res) => {
+  var terms = req.body.terms || '';
+  await run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ['voucher_terms', terms]);
+  res.redirect('/admin/settings?success=terms_saved');
 });
 
 app.get('/admin/notifications', isAuthenticated, isAdminOrCS, async (req, res) => {
@@ -1387,8 +1395,10 @@ app.get('/admin/voucher/:id', isAuthenticated, isAdminOrCS, async (req, res) => 
     );
     if (!v) return res.status(404).send('Voucher tidak ditemukan');
     var qrDataUrl = await QRCode.toDataURL('https://broco-care.tech/voucher/' + v.qr_token, { width: 300, margin: 2 });
+    var termsRow = await queryOne("SELECT value FROM settings WHERE key = ?", ['voucher_terms']);
+    var voucherTerms = termsRow ? termsRow.value : '';
     res.render('admin/voucher', {
-      v, qrDataUrl,
+      v, qrDataUrl, voucherTerms,
       csrf: req.csrfToken ? req.csrfToken() : '',
       notifCount: await getNotifCount(req.session.user),
       notifs: await getNotifs(req.session.user)

@@ -65,13 +65,19 @@
           <div class="col-12">
             <h6 class="fw-bold">Ketentuan:</h6>
             <ol class="small text-muted">
-              <li>Voucher ini berlaku sebagai bukti penerimaan barang untuk pemeriksaan.</li>
-              <li>Barang akan diperiksa oleh tim teknis kami dalam waktu 1x14 hari kerja.</li>
-              <li>Apabila barang dapat diperbaiki, akan dilakukan perbaikan tanpa biaya.</li>
-              <li>Apabila barang tidak dapat diperbaiki, akan dilakukan penggantian unit sesuai keputusan Management.</li>
-              <li>Biaya pengiriman barang pengganti ditanggung oleh PT. Broco Retail Solution.</li>
-              <li>Voucher ini tidak dapat dipindahtangankan dan hanya berlaku untuk 1 (satu) kali klaim.</li>
-              <li>Voucher ini akan hangus apabila melewati tanggal berlaku.</li>
+              <% if (typeof voucherTerms !== 'undefined' && voucherTerms) { %>
+                <% voucherTerms.split('\n').forEach(function(line) { if (line.trim()) { %>
+                <li><%= line.trim() %></li>
+                <% }}) %>
+              <% } else { %>
+                <li>Voucher ini berlaku sebagai bukti penerimaan barang untuk pemeriksaan.</li>
+                <li>Barang akan diperiksa oleh tim teknis kami dalam waktu 1x14 hari kerja.</li>
+                <li>Apabila barang dapat diperbaiki, akan dilakukan perbaikan tanpa biaya.</li>
+                <li>Apabila barang tidak dapat diperbaiki, akan dilakukan penggantian unit sesuai keputusan Management.</li>
+                <li>Biaya pengiriman barang pengganti ditanggung oleh PT. Broco Retail Solution.</li>
+                <li>Voucher ini tidak dapat dipindahtangankan dan hanya berlaku untuk 1 (satu) kali klaim.</li>
+                <li>Voucher ini akan hangus apabila melewati tanggal berlaku.</li>
+              <% } %>
             </ol>
           </div>
         </div>

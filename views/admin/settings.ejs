@@ -13,6 +13,7 @@
     <% if (query.success === 'restore_pending') { %><div class="alert alert-info">Proses restore sedang berjalan...</div><% } %>
     <% if (query.success === 'reset_data') { %><div class="alert alert-success">Semua data transaksi berhasil dihapus!</div><% } %>
     <% if (query.success === 'reset_total') { %><div class="alert alert-success">Reset total berhasil! Aplikasi seperti baru.</div><% } %>
+    <% if (query.success === 'terms_saved') { %><div class="alert alert-success">Ketentuan voucher berhasil disimpan!</div><% } %>
     <% if (query.error === 'wrong_password') { %><div class="alert alert-danger">Password saat ini salah!</div><% } %>
     <% if (query.error === 'password_mismatch') { %><div class="alert alert-danger">Password baru tidak cocok!</div><% } %>
     <% if (query.error && query.error.startsWith('Username')) { %><div class="alert alert-danger"><%= query.error %></div><% } %>
@@ -32,6 +33,7 @@
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabUsers">Kelola User</a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabBackup">Backup Data</a></li>
       <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabData">Data</a></li>
+      <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabVoucher">Ketentuan Voucher</a></li>
     </ul>
 
     <div class="tab-content">
@@ -194,6 +196,33 @@
                 </form>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-pane fade" id="tabVoucher">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-semibold"><i class="bi bi-file-earmark-text me-1"></i>Ketentuan Voucher Garansi</div>
+          <div class="card-body">
+            <p class="small text-secondary mb-2">Edit ketentuan yang muncul di voucher garansi QR. Setiap baris akan menjadi nomor urut (1, 2, 3...).</p>
+            <form method="POST" action="/admin/settings/voucher-terms">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="mb-2">
+                <textarea name="terms" class="form-control" rows="10" placeholder="Masukkan ketentuan, satu per baris"><%= typeof voucherTerms !== 'undefined' ? voucherTerms : '' %></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary">Simpan Ketentuan</button>
+            </form>
+            <hr>
+            <h6 class="fw-bold">Pratinjau:</h6>
+            <ol class="small text-muted">
+              <% if (typeof voucherTerms !== 'undefined' && voucherTerms) { %>
+                <% voucherTerms.split('\n').forEach(function(line) { if (line.trim()) { %>
+                <li><%= line.trim() %></li>
+                <% }}) %>
+              <% } else { %>
+                <li class="text-secondary">Belum ada ketentuan. Simpan ketentuan terlebih dahulu.</li>
+              <% } %>
+            </ol>
           </div>
         </div>
       </div>

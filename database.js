@@ -90,6 +90,9 @@ function createTablesLocal() {
     created_at TEXT DEFAULT (datetime('now','localtime')),
     expired_at TEXT
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY, value TEXT NOT NULL
+  )`);
 }
 
 
