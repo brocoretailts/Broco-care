@@ -15,6 +15,15 @@
     <% if (success === 'voucher_created') { %>
     <div class="alert alert-success alert-dismissible fade show py-2">Voucher garansi berhasil dibuat!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
+    <% if (req.query.wa_cs_ok === '1') { %>
+    <div class="alert alert-success alert-dismissible fade show py-2">WA berhasil dikirim ke CS!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+    <% } %>
+    <% if (req.query.wa_cs_fail === '1') { %>
+    <div class="alert alert-danger alert-dismissible fade show py-2">Gagal mengirim WA ke CS. Cek koneksi WhatsApp.<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+    <% } %>
+    <% if (req.query.error === 'cs_no_phone') { %>
+    <div class="alert alert-warning alert-dismissible fade show py-2">CS pembuat ticket belum memiliki nomor WA terdaftar.<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+    <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
       <a href="/admin/tickets" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Kembali</a>
       <div>
@@ -331,12 +340,23 @@
             </div>
           </div>
           <% } %>
+        <% } %>
+        <% if (user.role === 'admin') { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-whatsapp me-1"></i>Kirim WA ke CS</h6></div>
+          <div class="card-body">
+            <p class="small text-secondary mb-2">Kirim pemberitahuan ke CS pembuat ticket (<%= ticket.created_by_name || '-' %>).</p>
+            <button type="button" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#csWaModal">
+              <i class="bi bi-whatsapp"></i> Kirim WA ke CS
+            </button>
+          </div>
+        </div>
         <div class="card border-0 shadow-sm mb-3">
           <div class="card-body">
             <form method="POST" action="/admin/tickets/<%= ticket.id %>/close">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
-              <button type="submit" class="btn btn-success w-100" onclick="return confirm('Tutup ticket ini?')">
-                <i class="bi bi-check-circle"></i> Tutup Ticket (Completed)
+              <button type="submit" class="btn btn-outline-success w-100" onclick="return confirm('Tutup ticket <%= ticket.ticket_no %>? Status akan menjadi Completed.')">
+                <i class="bi bi-check-circle"></i> Case Close (Completed)
               </button>
             </form>
           </div>
@@ -348,6 +368,37 @@
 </div>
 </div>
 <%- include('../partials/footer') %>
+
+<!-- Modal Kirim WA ke CS -->
+<div class="modal fade" id="csWaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="/admin/tickets/<%= ticket.id %>/send-cs-wa">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-whatsapp text-success"></i> Kirim WA ke CS</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-secondary mb-2">Pesan akan dikirim ke <strong><%= ticket.created_by_name || 'CS' %></strong>.</p>
+          <div class="mb-3">
+            <label class="form-label small">Pesan <span class="text-danger">*</span></label>
+            <textarea name="message" class="form-control" rows="4" placeholder="Tulis pesan untuk CS...">Ada update untuk ticket <%= ticket.ticket_no %> - <%= ticket.customer_name %>. Silakan hubungi konsumen untuk tindak lanjut.</textarea>
+          </div>
+          <% if (typeof voucher !== 'undefined' && voucher) { %>
+          <div class="alert alert-info py-2 mb-0">
+            <small><i class="bi bi-link-45deg"></i> Link Voucher akan otomatis disertakan dalam pesan.</small>
+          </div>
+          <% } %>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-send"></i> Kirim WA</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="print-area">
   <div class="p-detail-wrap">

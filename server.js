@@ -1446,6 +1446,24 @@ app.post('/admin/tickets/:id/send-voucher-wa', isAuthenticated, isAdminOrCS, asy
   }
 });
 
+app.post('/admin/tickets/:id/send-cs-wa', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    var ticket = await queryOne("SELECT t.*, u.phone as cs_phone, u.fullname as cs_name FROM tickets t LEFT JOIN users u ON t.created_by = u.id WHERE t.id = ?", [req.params.id]);
+    if (!ticket) return res.status(404).send('Ticket tidak ditemukan');
+    if (!ticket.cs_phone) return res.redirect('/admin/tickets/' + req.params.id + '?error=cs_no_phone');
+    var adminMessage = req.body.message || 'Ada update status untuk ticket ini. Silakan cek detailnya.';
+    var voucher = await queryOne("SELECT qr_token, voucher_no FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
+    var voucherLink = voucher ? 'https://broco-care.tech/voucher/' + voucher.qr_token : null;
+    var ok = await wa.sendCsNotification(ticket.cs_phone, ticket.ticket_no, ticket.customer_name, adminMessage, voucherLink);
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.id, req.session.user.id, 'wa_cs', 'WA dikirim ke CS ' + ticket.cs_name + ': ' + adminMessage.substring(0, 100)]);
+    res.redirect('/admin/tickets/' + req.params.id + (ok ? '?wa_cs_ok=1' : '?wa_cs_fail=1'));
+  } catch (e) {
+    console.error('Send CS WA error:', e);
+    res.redirect('/admin/tickets/' + req.params.id + '?wa_cs_fail=1');
+  }
+});
+
 /* ============= TEKNISI ROUTES ============= */
 
 app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, async (req, res) => {

@@ -245,6 +245,17 @@ async function sendScheduleCancelledNotification(phone, ticketNo) {
   }
 }
 
+async function sendCsNotification(phone, ticketNo, customerName, adminMessage, voucherLink) {
+  try {
+    var msg = '\uD83D\uDCE2 *BROCO CMS - INFO TICKET*\n\nTicket: ' + ticketNo + '\nCustomer: ' + customerName + '\n\nPesan dari Admin:\n' + adminMessage;
+    if (voucherLink) msg += '\n\nLink Voucher Garansi:\n' + voucherLink;
+    return await sendWithRetry(phone, msg);
+  } catch (e) {
+    console.error('sendCsNotification error:', e.message);
+    return false;
+  }
+}
+
 async function sendToMany(phones, fn) {
   var args = Array.prototype.slice.call(arguments, 2);
   if (!phones || !phones.length) return 0;
@@ -275,6 +286,7 @@ module.exports = {
   sendRejectedNotification: sendRejectedNotification,
   sendScheduleNotification: sendScheduleNotification,
   sendScheduleCancelledNotification: sendScheduleCancelledNotification,
+  sendCsNotification: sendCsNotification,
   sendToMany: sendToMany,
   appLink: appLink,
   getStatus: getStatus,
