@@ -348,7 +348,7 @@
         <div class="card border-0 shadow-sm mb-3">
           <div class="card-header bg-white"><h6 class="fw-bold mb-0"><i class="bi bi-whatsapp me-1"></i>Kirim WA ke CS</h6></div>
           <div class="card-body">
-            <p class="small text-secondary mb-2">Tujuan: <strong><%= ticket.created_by_name || '-' %></strong></p>
+            <p class="small text-secondary mb-2">Tujuan: <strong>CS</strong> (pembuat ticket)</p>
             <form method="POST" action="/admin/tickets/<%= ticket.id %>/send-cs-wa">
               <input type="hidden" name="_csrf" value="<%= csrf %>">
               <div class="mb-2">
