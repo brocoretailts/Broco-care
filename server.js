@@ -1454,7 +1454,8 @@ app.post('/admin/tickets/:id/send-cs-wa', isAuthenticated, isAdmin, async (req, 
     var ticket = await queryOne("SELECT t.*, u.phone as cs_phone, u.fullname as cs_name FROM tickets t LEFT JOIN users u ON t.created_by = u.id WHERE t.id = ?", [req.params.id]);
     if (!ticket) return res.status(404).send('Ticket tidak ditemukan');
     if (!ticket.cs_phone) return res.redirect('/admin/tickets/' + req.params.id + '?error=cs_no_phone');
-    var adminMessage = req.body.message || 'Ada update status untuk ticket ini. Silakan cek detailnya.';
+    var adminMessage = (req.body.message || '').trim();
+    if (!adminMessage) return res.redirect('/admin/tickets/' + req.params.id + '?error=empty_message');
     var voucher = await queryOne("SELECT qr_token, voucher_no FROM service_vouchers WHERE ticket_id = ?", [req.params.id]);
     var voucherLink = voucher ? 'https://broco-care.tech/voucher/' + voucher.qr_token : null;
     var ok = await wa.sendCsNotification(ticket.cs_phone, ticket.ticket_no, ticket.customer_name, adminMessage, voucherLink);
