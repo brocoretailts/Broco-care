@@ -15,13 +15,13 @@
     <% if (success === 'voucher_created') { %>
     <div class="alert alert-success alert-dismissible fade show py-2">Voucher garansi berhasil dibuat!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
-    <% if (req.query.wa_cs_ok === '1') { %>
+    <% if (typeof wa_cs_ok !== 'undefined' && wa_cs_ok === '1') { %>
     <div class="alert alert-success alert-dismissible fade show py-2">WA berhasil dikirim ke CS!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
-    <% if (req.query.wa_cs_fail === '1') { %>
+    <% if (typeof wa_cs_fail !== 'undefined' && wa_cs_fail === '1') { %>
     <div class="alert alert-danger alert-dismissible fade show py-2">Gagal mengirim WA ke CS. Cek koneksi WhatsApp.<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
-    <% if (req.query.error === 'cs_no_phone') { %>
+    <% if (typeof error !== 'undefined' && error === 'cs_no_phone') { %>
     <div class="alert alert-warning alert-dismissible fade show py-2">CS pembuat ticket belum memiliki nomor WA terdaftar.<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
     <div class="d-flex justify-content-between align-items-center mb-3">
