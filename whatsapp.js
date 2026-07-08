@@ -186,8 +186,7 @@ async function sendWithRetry(phone, message, retries) {
 }
 
 function appLink(path) {
-  var url = process.env.APP_URL || '';
-  if (!url) return '';
+  var url = process.env.APP_URL || 'https://broco-care.tech';
   url = url.replace(/\/+$/, '');
   return '\n' + url + (path || '');
 }
