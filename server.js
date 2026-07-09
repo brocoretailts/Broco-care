@@ -1451,7 +1451,7 @@ app.post('/admin/tickets/:id/send-voucher-wa', isAuthenticated, isAdminOrCS, asy
 
 app.post('/admin/tickets/:id/send-cs-wa', isAuthenticated, isAdmin, async (req, res) => {
   try {
-    var ticket = await queryOne("SELECT t.*, u.phone as cs_phone, u.fullname as cs_name FROM tickets t LEFT JOIN users u ON t.created_by = u.id WHERE t.id = ?", [req.params.id]);
+    var ticket = await queryOne("SELECT t.*, u.phone as cs_phone, u.name as cs_name FROM tickets t LEFT JOIN users u ON t.created_by = u.id WHERE t.id = ?", [req.params.id]);
     if (!ticket) return res.status(404).send('Ticket tidak ditemukan');
     if (!ticket.cs_phone) return res.redirect('/admin/tickets/' + req.params.id + '?error=cs_no_phone');
     var adminMessage = (req.body.message || '').trim();
