@@ -10,12 +10,14 @@ let lastQr = null;
 let initPromise = null;
 let reconnectTimer = null;
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
 const RETRY_DELAY = 10000;
 const RECONNECT_DELAY = 10000;
 const MAX_FAILED_MSGS = 50;
+const DEDUP_WINDOW = 60000;
 
 let failedMessages = [];
+var sentCache = {};
 
 async function init() {
   if (initPromise) return initPromise;
@@ -107,7 +109,24 @@ function normalizePhone(phone) {
   return null;
 }
 
+function isDuplicate(phone, message) {
+  var key = phone + '|' + message;
+  var now = Date.now();
+  if (sentCache[key] && (now - sentCache[key] < DEDUP_WINDOW)) return true;
+  sentCache[key] = now;
+  // cleanup old entries
+  var keys = Object.keys(sentCache);
+  for (var i = 0; i < keys.length; i++) {
+    if (now - sentCache[keys[i]] > DEDUP_WINDOW) delete sentCache[keys[i]];
+  }
+  return false;
+}
+
 async function sendWaMessage(phone, message) {
+  if (isDuplicate(phone, message)) {
+    if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_dedup', 'phone=' + phone + ' skipped (duplicate within ' + DEDUP_WINDOW + 'ms)');
+    return true;
+  }
   if (!ready || !sock) {
     console.log('WhatsApp not ready. Skipping WA notification to', phone);
     if (typeof global !== 'undefined' && global.logDebug) global.logDebug('sendWaMessage_not_ready', 'phone=' + phone + ' ready=' + ready + ' sock=' + !!sock);
