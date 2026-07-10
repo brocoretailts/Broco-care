@@ -33,6 +33,13 @@ function isManagement(req, res, next) {
   res.redirect('/dashboard');
 }
 
+function isAdminOrCSOrManagement(req, res, next) {
+  if (req.session && req.session.user && ['admin','cs','management'].includes(req.session.user.role)) {
+    return next();
+  }
+  res.redirect('/dashboard');
+}
+
 function isTeknisi(req, res, next) {
   if (req.session && req.session.user && req.session.user.role === 'teknisi') {
     return next();
@@ -47,4 +54,4 @@ function redirectIfAuthenticated(req, res, next) {
   next();
 }
 
-module.exports = { isAuthenticated, isAdmin, isCS, isAdminOrCS, isManagement, isTeknisi, redirectIfAuthenticated };
+module.exports = { isAuthenticated, isAdmin, isCS, isAdminOrCS, isManagement, isAdminOrCSOrManagement, isTeknisi, redirectIfAuthenticated };

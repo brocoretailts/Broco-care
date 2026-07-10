@@ -11,7 +11,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { initDB, closeDB, run, runWithResults, queryAll, queryOne, SQLiteSessionStore, checkpoint, prepareBackup, nowWIB, logDebug } = require('./database');
 const { seed } = require('./seed');
-const { isAuthenticated, isAdmin, isAdminOrCS, isCS, isManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
+const { isAuthenticated, isAdmin, isAdminOrCS, isCS, isManagement, isAdminOrCSOrManagement, isTeknisi, redirectIfAuthenticated } = require('./middleware/auth');
 const wa = require('./whatsapp');
 const QRCode = require('qrcode');
 
@@ -432,7 +432,7 @@ app.get('/admin/tickets', isAuthenticated, isAdmin, async (req, res) => {
   });
 });
 
-app.get('/admin/tickets/:id', isAuthenticated, isAdminOrCS, async (req, res) => {
+app.get('/admin/tickets/:id', isAuthenticated, isAdminOrCSOrManagement, async (req, res) => {
   const ticket = await queryOne(`
     SELECT t.*, p.nama_produk, p.tipe, p.garansi_bulan,
       u1.name as created_by_name, u2.name as approved_by_name, u3.name as closed_by_name
