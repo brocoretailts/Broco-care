@@ -1474,7 +1474,7 @@ app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, async (req, res) => {
   const today = todayStr();
   const todaySchedule = await queryAll(`
     SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, t.customer_alamat,
-      t.customer_hp, t.keluhan, t.status,
+      t.customer_hp, t.customer_provinsi, t.keluhan, t.status,
       p.nama_produk, p.tipe,
       v.id as visit_id
     FROM schedules s
@@ -1486,7 +1486,8 @@ app.get('/teknisi/dashboard', isAuthenticated, isTeknisi, async (req, res) => {
   `, [req.session.user.id, today]);
 
   const upcomingSchedule = await queryAll(`
-    SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
+    SELECT s.*, t.ticket_no, t.customer_name, t.customer_kota, t.customer_alamat,
+      t.customer_hp, t.customer_provinsi, p.nama_produk
     FROM schedules s
     JOIN tickets t ON s.ticket_id = t.id
     LEFT JOIN products p ON t.product_id = p.id
@@ -1611,7 +1612,7 @@ app.post('/teknisi/visit/:ticketId/start', isAuthenticated, isTeknisi, async (re
 
 app.get('/teknisi/history', isAuthenticated, isTeknisi, async (req, res) => {
   const visits = await queryAll(`
-    SELECT v.*, t.ticket_no, t.customer_name, t.customer_kota, p.nama_produk
+    SELECT v.*, t.ticket_no, t.customer_name, t.customer_kota, t.customer_alamat, t.customer_hp, t.customer_provinsi, p.nama_produk
     FROM visit_results v
     JOIN tickets t ON v.ticket_id = t.id
     LEFT JOIN products p ON t.product_id = p.id

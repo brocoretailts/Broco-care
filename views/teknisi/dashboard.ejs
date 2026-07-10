@@ -41,8 +41,8 @@
           <div class="col">
             <h6 class="fw-bold mb-1"><%= s.customer_name %></h6>
             <p class="mb-1 small"><%= s.nama_produk %> - <%= s.ticket_no %></p>
-            <p class="mb-0 small text-secondary"><i class="bi bi-geo-alt"></i> <%= s.customer_kota %>, <%= s.customer_alamat %></p>
-            <p class="mb-0 small"><i class="bi bi-telephone"></i> <%= s.customer_hp %></p>
+            <p class="mb-0 small text-secondary"><i class="bi bi-geo-alt"></i> <%= s.customer_alamat %>, <%= s.customer_kota %><%= s.customer_provinsi ? ', '+s.customer_provinsi : '' %></p>
+            <p class="mb-0 small fw-semibold"><i class="bi bi-telephone"></i> <%= s.customer_hp %></p>
             <p class="mb-0 small text-warning">Keluhan: <%= s.keluhan %></p>
           </div>
           <div class="col-auto">
@@ -62,7 +62,7 @@
     <div class="card border-0 shadow-sm">
       <div class="table-responsive">
         <table class="table table-sm mb-0">
-          <thead><tr><th>Tanggal</th><th>Jam</th><th>Customer</th><th>Produk</th><th>Kota</th></tr></thead>
+          <thead><tr><th>Tanggal</th><th>Jam</th><th>Customer</th><th>Produk</th><th>Alamat</th><th>No. HP</th></tr></thead>
           <tbody>
             <% upcomingSchedule.forEach(function(s) { %>
             <tr>
@@ -70,7 +70,8 @@
               <td><%= s.jam %></td>
               <td><%= s.customer_name %></td>
               <td><%= s.nama_produk %></td>
-              <td><%= s.customer_kota %></td>
+              <td class="small"><%= s.customer_alamat %>, <%= s.customer_kota %><%= s.customer_provinsi ? ', '+s.customer_provinsi : '' %></td>
+              <td><%= s.customer_hp %></td>
             </tr>
             <% }) %>
           </tbody>
