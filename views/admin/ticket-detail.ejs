@@ -15,6 +15,9 @@
     <% if (success === 'voucher_created') { %>
     <div class="alert alert-success alert-dismissible fade show py-2">Voucher garansi berhasil dibuat!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
+    <% if (success === 'reopened') { %>
+    <div class="alert alert-success alert-dismissible fade show py-2">Ticket dibuka kembali! Status dikembalikan ke sebelumnya.<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
+    <% } %>
     <% if (typeof wa_cs_ok !== 'undefined' && wa_cs_ok === '1') { %>
     <div class="alert alert-success alert-dismissible fade show py-2">WA berhasil dikirim ke CS!<button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button></div>
     <% } %>
@@ -371,6 +374,18 @@
             </form>
           </div>
         </div>
+        <% if (ticket.status === 'completed') { %>
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body">
+            <form method="POST" action="/admin/tickets/<%= ticket.id %>/reopen">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Buka kembali ticket <%= ticket.ticket_no %>? Status akan dikembalikan ke sebelumnya.')">
+                <i class="bi bi-arrow-counterclockwise"></i> Reopen / Batal Close
+              </button>
+            </form>
+          </div>
+        </div>
+        <% } %>
         <% } %>
       </div>
     </div>

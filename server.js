@@ -578,6 +578,27 @@ app.post('/admin/tickets/:id/close', isAuthenticated, isAdmin, async (req, res) 
   res.redirect(`/admin/tickets/${req.params.id}`);
 });
 
+app.post('/admin/tickets/:id/reopen', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    var ticket = await queryOne("SELECT id, status, ticket_no, approved_by FROM tickets WHERE id = ?", [req.params.id]);
+    if (!ticket || ticket.status !== 'completed') return res.redirect('/admin/tickets/' + req.params.id + '?error=not_completed');
+    var visit = await queryOne("SELECT id FROM visit_results WHERE ticket_id = ?", [req.params.id]);
+    var schedule = await queryOne("SELECT id FROM schedules WHERE ticket_id = ?", [req.params.id]);
+    var newStatus = 'waiting';
+    if (visit) newStatus = 'on_progress';
+    else if (schedule) newStatus = 'scheduled';
+    else if (ticket.approved_by) newStatus = 'waiting';
+    await run("UPDATE tickets SET status = ?, closed_by = NULL, closed_at = NULL, updated_at = ? WHERE id = ?",
+      [newStatus, nowWIB(), req.params.id]);
+    await run("INSERT INTO activity_log (ticket_id, user_id, action, description) VALUES (?, ?, ?, ?)",
+      [req.params.id, req.session.user.id, 'reopen', 'Ticket dibuka kembali (sebelumnya closed) — status: ' + newStatus]);
+    res.redirect('/admin/tickets/' + req.params.id + '?success=reopened');
+  } catch (e) {
+    console.error('Reopen error:', e);
+    res.redirect('/admin/tickets/' + req.params.id + '?error=reopen_failed');
+  }
+});
+
 app.post('/admin/tickets/:id/delete', isAuthenticated, isAdmin, validateCsrf, async (req, res) => {
   await run("DELETE FROM visit_results WHERE ticket_id = ?", [req.params.id]);
   await run("DELETE FROM activity_log WHERE ticket_id = ?", [req.params.id]);
